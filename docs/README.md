@@ -15,6 +15,7 @@ the same change updates both.
 | If you want | Read |
 | --- | --- |
 | What Drovi is | [00-overview/product-brief.md](00-overview/product-brief.md) |
+| **How to contribute** | [02-implementation/branching-and-workflow.md](02-implementation/branching-and-workflow.md) — **never commit to `main`** |
 | Where it is going | [00-overview/roadmap.md](00-overview/roadmap.md) |
 | How to build the next thing | [02-implementation/implementation-plan.md](02-implementation/implementation-plan.md) |
 | Why it is shaped this way | [00-overview/decisions/](00-overview/decisions/) |
@@ -25,7 +26,7 @@ the same change updates both.
 | --- | --- |
 | [00-overview/](00-overview/) | product brief, roadmap, glossary, ADRs |
 | [01-architecture/](01-architecture/) | high-level design, tech stack |
-| [02-implementation/](02-implementation/) | coding standards, project structure, implementation plan |
+| [02-implementation/](02-implementation/) | branching and workflow, coding standards, project structure, implementation plan |
 | [03-api/](03-api/) | the sandbox surface and the console API |
 | [04-data/](04-data/) | the schema and its invariants |
 | [05-security/](05-security/) | **read before touching a route, dependency, env var or grant** |
@@ -40,6 +41,12 @@ days" is an `INSERT` — not a code change, not a redeploy.
 
 If a proposed change would move behaviour from data into code, it is probably wrong. Say
 so rather than implementing it.
+
+## Branching, in one line
+
+Work on `feat/<name>` or `fix/<name>` off `dev`; PR into `dev`; only the human merges
+`dev` → `main`. Full rules:
+[02-implementation/branching-and-workflow.md](02-implementation/branching-and-workflow.md).
 
 ## Rules for changing these docs
 

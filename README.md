@@ -37,11 +37,20 @@ The design rests on one idea: **a sandbox is data, not scripts.** Asking for
 five blocked cards is an `INSERT`, not a code change and not a redeploy. That is
 what makes the chat able to change behaviour in a second.
 
-## Status
+## Contributing
 
-Pivoted from an unrelated product (a flight-tracking app) on 2026-08-22. That
-work is preserved on the `dev` and `feat/p0-foundations` branches; `main` is the
-sandbox platform and shares only its build, deployment and test scaffolding.
+**Never commit to `main`, and never open a PR into it** except the release PR from `dev`.
+
+```bash
+git checkout dev && git pull
+git checkout -b feat/<feature-name>      # or fix/<fix-name>
+# …work…  then open a PR into dev
+```
+
+`dev` → `main` happens once `dev` is live and stable, and **the human decides that merge**.
+Full rules: [docs/02-implementation/branching-and-workflow.md](docs/02-implementation/branching-and-workflow.md).
+
+## Status
 
 | Area | State |
 | --- | --- |
