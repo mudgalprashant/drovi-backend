@@ -1,0 +1,62 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '4.0.7'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.pm'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	// --- Web ------------------------------------------------------------
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+	// --- Persistence ----------------------------------------------------
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	// Boot 4 split autoconfiguration into per-technology modules: flyway-core on the
+	// classpath no longer triggers FlywayAutoConfiguration on its own, so without
+	// this the migrations are silently never run and the app boots on an empty schema.
+	implementation 'org.springframework.boot:spring-boot-flyway'
+	implementation 'org.flywaydb:flyway-core'
+	implementation 'org.flywaydb:flyway-database-postgresql'
+	runtimeOnly 'org.postgresql:postgresql'
+
+	// --- Cache ----------------------------------------------------------
+	// Caffeine, not Redis. We run one instance; an in-JVM cache has no network
+	// hop, no serialisation and nothing extra to keep alive. See decision #13.
+	implementation 'org.springframework.boot:spring-boot-starter-cache'
+	implementation 'com.github.ben-manes.caffeine:caffeine'
+
+	// --- Operations -----------------------------------------------------
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+	// --- Boilerplate ----------------------------------------------------
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+
+	// --- Test -----------------------------------------------------------
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	// Runs a REAL Postgres binary, downloaded as a dependency. No Docker, no
+	// Homebrew, nothing for a developer to install — which is the point: a
+	// migration that only ever runs against H2 has not been tested.
+	testImplementation 'io.zonky.test:embedded-postgres:2.1.0'
+	testImplementation enforcedPlatform('io.zonky.test.postgres:embedded-postgres-binaries-bom:17.4.0')
+	testCompileOnly 'org.projectlombok:lombok'
+	testAnnotationProcessor 'org.projectlombok:lombok'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

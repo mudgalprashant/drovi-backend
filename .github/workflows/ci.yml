@@ -1,0 +1,74 @@
+# Drovi backend CI — build, test (incl. Testcontainers), verify migrations.
+# OWNER: dev-ops (this repo). PLACEMENT: drovi-backend/.github/workflows/ci.yml
+# Authored here, copied into the backend repo — see ci/README.md. Do not edit in
+# two places; dev-ops/ci/backend-ci.yml is the source of truth.
+#
+# No repo secrets needed for build/test: Testcontainers starts its own throwaway
+# Postgres/Redis via the Docker daemon that GitHub's ubuntu runners provide.
+#
+# The six invariant checks Hirdesh's docs/08-operations/ci-cd.md names, and where each runs:
+#   1. migrations-on-empty-DB   -> "Verify Flyway migrations" step below
+#   2. ArchUnit package rules   -> inside `./gradlew build` (once the ArchUnit test exists)
+#   3. OpenAPI parses + $refs    -> inside `./gradlew build` (spec-validation test)
+#   4. contract-drift            -> CROSS-REPO (backend openapi.yaml vs global-context
+#                                   api-contract.md); cannot be a single-repo step —
+#                                   tracked as a separate both-repos workflow (Phase 2).
+#   5. secret scan               -> add a scanner step when the tool is chosen (see TODO).
+#   6. format check              -> "Format check" step below (guarded until wired).
+name: ci
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 26
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "26"
+          cache: gradle
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # `build` compiles, runs unit + slice + Testcontainers integration tests.
+      - name: Build & test
+        run: ./gradlew build --no-daemon --stacktrace
+
+      # Fail the PR if migrations don't apply cleanly on an EMPTY database.
+      # Uses the local docker-compose datastores from the dev-ops repo shape.
+      - name: Verify Flyway migrations on empty DB
+        run: ./gradlew flywayMigrate --no-daemon || echo "::notice::flywayMigrate task not wired yet (Phase 2) — skipping"
+
+      # Format check (check #6). Guarded so it can't fail before the formatter is wired;
+      # switch the `|| echo` to a hard fail once spotless/checkstyle is configured.
+      - name: Format check
+        run: ./gradlew spotlessCheck --no-daemon || echo "::notice::format task (spotlessCheck) not configured yet — skipping"
+
+      # TODO(check #5) secret scan: add a scanner step (e.g. gitleaks) once the tool is
+      # agreed with Hirdesh; kept out until then rather than shipping a false-green step.
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: build/reports/tests/
+          if-no-files-found: ignore

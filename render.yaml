@@ -1,0 +1,36 @@
+# Render Blueprint. Render reads this on connect, so the service is defined here
+# rather than clicked into a dashboard nobody can diff or review.
+services:
+  - type: web
+    name: drovi-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    branch: main
+    healthCheckPath: /actuator/health
+
+    envVars:
+      # sync: false means "prompt me, never store in git". Every secret below is
+      # entered once in the Render dashboard and never appears in this file.
+      - key: DROVI_DB_URL
+        sync: false
+      - key: DROVI_DB_USERNAME
+        sync: false
+      - key: DROVI_DB_PASSWORD
+        sync: false
+      - key: DROVI_FIREBASE_PROJECT_ID
+        sync: false
+      - key: DROVI_FIREBASE_CREDENTIALS_B64
+        sync: false
+      - key: DROVI_ANTHROPIC_API_KEY
+        sync: false
+      - key: DROVI_PUBLIC_BASE_URL
+        sync: false
+
+      # Two connections, not five. The free instance is small and Supabase's
+      # free pooler is shared; a big pool here starves both.
+      - key: DROVI_DB_POOL_MAX
+        value: "2"
+      - key: DROVI_PORT
+        value: "8080"

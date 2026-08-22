@@ -1,0 +1,7 @@
+plugins {
+	// Lets Gradle download the pinned JDK itself, so a fresh machine needs no
+	// manual JDK install and every machine compiles against the same bytecode.
+	id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'drovi-backend'

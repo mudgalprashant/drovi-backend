@@ -1,0 +1,89 @@
+spring:
+  application:
+    name: drovi-backend
+
+  datasource:
+    # Supabase, via the SUPAVISOR SESSION POOLER — not the direct connection.
+    #
+    #   host: aws-0-<region>.pooler.supabase.com   port: 5432
+    #   user: postgres.<project-ref>
+    #
+    # Three things make this the only workable choice, and each one fails in a
+    # different confusing way if ignored:
+    #
+    #  1. Supabase DIRECT connections are IPv6-only unless you buy the IPv4
+    #     add-on. Most container hosts have no IPv6 egress, so a direct URL
+    #     fails to connect at all — and the error looks like a firewall problem.
+    #  2. The pooler's TRANSACTION mode (port 6543) does not support prepared
+    #     statements, which Hibernate and Flyway both rely on. SESSION mode
+    #     (5432) does. Same host, different port, completely different semantics.
+    #  3. Flyway takes a Postgres advisory lock around a migration. Advisory
+    #     locks are connection-scoped, so under transaction pooling the lock can
+    #     be taken on one backend and released on another. Session mode keeps
+    #     one client on one backend for the life of the connection.
+    url: ${DROVI_DB_URL:jdbc:postgresql://localhost:5432/drovi}
+    username: ${DROVI_DB_USERNAME:postgres}
+    password: ${DROVI_DB_PASSWORD:}
+    hikari:
+      # Sized against the DATABASE's limit, not expected load. Supabase's free
+      # tier is small and shared, and exhausting it takes out every other client
+      # of that project — including the SQL editor you would use to diagnose it.
+      maximum-pool-size: ${DROVI_DB_POOL_MAX:5}
+      minimum-idle: 1
+      connection-timeout: 10000
+      # Must stay below the pooler's own idle timeout, or Hikari hands out a
+      # connection the pooler has already closed and the first query fails.
+      max-lifetime: 240000
+      keepalive-time: 120000
+
+  jpa:
+    # Flyway owns the schema. Hibernate must never alter it: ddl-auto on a real
+    # database is how a column quietly disappears in production.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    # Our notification templates are stored as '${newValue}' strings, and Flyway's
+    # own placeholder syntax is also ${...} — so Flyway tries to substitute them at
+    # migration time and aborts on the first one it cannot resolve. It scans SQL
+    # comments too, so even a commented-out example collides. We use no Flyway
+    # placeholders anywhere, so turning the feature off is the fix; changing the
+    # template syntax would push the same collision onto the rendering code instead.
+    placeholder-replacement: false
+
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=10m
+
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${DROVI_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # health only. The rest of actuator is not authenticated yet, and this
+        # process is reachable from the public internet because of the webhook.
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.pm.drovi_backend: ${DROVI_LOG_LEVEL:INFO}

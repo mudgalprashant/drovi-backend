@@ -1,0 +1,35 @@
+# --- Build output -------------------------------------------------------
+build/
+!gradle/wrapper/gradle-wrapper.jar
+.gradle/
+out/
+bin/
+
+# --- Java ---------------------------------------------------------------
+*.class
+hs_err_pid*
+replay_pid*
+
+# Packaged archives. The Gradle wrapper jar is exempted above and MUST stay
+# tracked: without it a fresh clone cannot run ./gradlew and CI dies on step one.
+*.jar
+*.war
+*.nar
+*.ear
+
+# --- Logs ---------------------------------------------------------------
+*.log
+
+# --- Secrets ------------------------------------------------------------
+# Never commit real credentials. Only .env.example belongs in git.
+.env
+.env.*
+!.env.example
+*-service-account.json
+firebase-adminsdk-*.json
+
+# --- IDE / OS -----------------------------------------------------------
+.idea/
+*.iml
+.vscode/
+.DS_Store
