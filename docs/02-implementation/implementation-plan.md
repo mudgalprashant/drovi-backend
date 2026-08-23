@@ -133,7 +133,7 @@ spend can be measured or stopped is the single most expensive mistake available 
 | Step | Detail |
 | --- | --- |
 | `AiProvider` interface | resolved by bean name from `ai_provider_config.adapter_bean` |
-| `anthropicProvider` | uses the official Anthropic SDK; consult the `claude-api` skill for current model ids and shapes rather than memory |
+| `geminiProvider` | Gemini's REST API (`generativelanguage.googleapis.com`), key in the `x-goog-api-key` header. **Verify model ids against Google's docs, never memory** — they move fast, and a wrong id fails at request time |
 | `AiCallLedger` | writes an `ai_call` row for **every** call, success or failure |
 | `SpendGuard` | checks the kill switch and both daily caps **before** the call; records `CAPPED` when it refuses |
 | Pricing | resolved from `model_pricing` at the rate in force at call time |

@@ -58,7 +58,7 @@ entire class of "my machine was compromised" incidents rather than mitigating it
 
 | Credential | Why it is top-tier | Compromise means |
 | --- | --- | --- |
-| `DROVI_ANTHROPIC_API_KEY` | metered spend with no natural ceiling | an unbounded bill, and generation on your account |
+| `DROVI_GEMINI_API_KEY` | metered spend with no natural ceiling | an unbounded bill, and generation on your account |
 | Production DB credentials | every tenant's sandbox data at once | full multi-tenant breach |
 | Static CI cloud credentials | everything the pipeline can reach | full infrastructure compromise |
 | Your Render login | every production secret at once | everything above, together — **MFA is not optional here** |

@@ -19,7 +19,7 @@ last_updated: 2026-08-23
 | Tests | **JUnit 5** + **zonky embedded-postgres** | a real Postgres binary as a Gradle dependency |
 | Deploy | **Docker → Render** | the Dockerfile *is* the deploy path |
 | Identity | **Firebase Authentication** | verify only; never issue. **Not yet wired** |
-| Model provider | **Anthropic** | resolved from the database. **Not yet wired** |
+| Model provider | **Google Gemini** | resolved from the database. **Not yet wired** |
 | Console | **Next.js + React + TypeScript** | ADR-0005. Not started |
 
 ## Two Boot 4 traps

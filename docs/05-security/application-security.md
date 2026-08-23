@@ -142,7 +142,7 @@ INVARIANT: no secret value in the repo. Config references env vars and the app *
 start** when a required one is missing — never a silent default.
 
 Inventory (names only): `DROVI_DB_URL`, `DROVI_DB_USERNAME`, `DROVI_DB_PASSWORD`,
-`DROVI_ANTHROPIC_API_KEY`, `DROVI_FIREBASE_PROJECT_ID`.
+`DROVI_GEMINI_API_KEY`, `DROVI_FIREBASE_PROJECT_ID`.
 
 `DROVI_FIREBASE_PROJECT_ID` is **not a secret** — verifying a Firebase ID token needs no
 service-account credential (ADR-0006), so there is no Firebase credential to protect.
