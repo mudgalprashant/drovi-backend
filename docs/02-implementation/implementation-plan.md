@@ -127,24 +127,42 @@ its ledger and spend caps. Do not ship one without the other.
 
 ## Phase 3 — Generation
 
-### 3.1 The adapter and the ledger — one slice, deliberately
+### 3.1 The adapter and the ledger — one slice, deliberately ✅
 
-Do **not** ship the adapter before the ledger and caps. An adapter that can spend before
-spend can be measured or stopped is the single most expensive mistake available here.
+Shipped together, as required. An adapter that can spend before spend can be measured or
+stopped is the single most expensive mistake available here. Design record: **ADR-0009**.
 
-| Step | Detail |
+| Step | State |
 | --- | --- |
-| `AiProvider` interface | resolved by bean name from `ai_provider_config.adapter_bean` |
-| `geminiProvider` | Gemini's REST API (`generativelanguage.googleapis.com`), key in the `x-goog-api-key` header. **Verify model ids against Google's docs, never memory** — they move fast, and a wrong id fails at request time |
-| `AiCallLedger` | writes an `ai_call` row for **every** call, success or failure |
-| `SpendGuard` | checks the kill switch and both daily caps **before** the call; records `CAPPED` when it refuses |
-| Pricing | resolved from `model_pricing` at the rate in force at call time |
+| `AiProvider` interface | ✅ resolved by bean *name* from `ai_provider_config.adapter_bean`. Implementations are package-private, so nothing can inject one by type |
+| `geminiProvider` | ✅ `integration/gemini/GeminiProvider`. Key in the header the config row names. **Model ids are not in the code** — they come from `app_config` routing, because a wrong id fails at request time and must be fixable with an UPDATE |
+| `AiCallLedger` | ✅ an `ai_call` row for **every** call — OK, ERROR, TIMEOUT, REFUSED and CAPPED. `REQUIRES_NEW`, so a failing job cannot roll back the record of what it spent |
+| `SpendGuard` | ✅ kill switch, then platform daily cap, then account daily cap — cheapest first, so an incident does not gate the kill switch behind a query |
+| `ModelRouter` | ✅ `ai.model.<PURPOSE>` → `ai.model.default` → the provider row's own model |
+| Pricing | ✅ `model_pricing` at the rate in force **at call time**, integer micro-USD throughout |
+| `AiGateway` | ✅ the only caller of an `AiProvider`, and it throws if invoked inside a transaction |
 
 ⚠️ **Never inside a transaction.** Generation takes minutes; a free-tier pool dies holding
-a connection that long. Commit → call → record.
+a connection that long. Commit → call → record. This is now enforced, not just advised:
+`AiGateway.call` checks `TransactionSynchronizationManager` and throws.
 
-**Test:** with `ai.enabled = false`, a generation fails closed with `CAPPED` and makes no
-outbound call. With the cap exceeded, the same. Both write a ledger row.
+Every default fails closed — a missing `ai.enabled` row reads as *off*, a missing cap reads
+as *zero*. See ADR-0009 for why the two failure directions are not symmetric.
+
+**Tested** — 28 tests, no API key and no network:
+
+- `AiSpendControlsTest` (16) drives the gateway against a stub provider registered the same
+  way a real one is: a row naming a bean. The stub counts its calls, so a cap is asserted as
+  *nothing was sent*, not merely *something was thrown*. Covers the kill switch, both daily
+  caps, the UTC day boundary, cost at the rate in force, a scheduled future price rise, all
+  three fail-closed configuration paths, and the transaction refusal.
+- `GeminiProviderTest` (12) runs the adapter against a real HTTP server on localhost:
+  the system-instruction/contents separation, the auth header, structured output, reasoning
+  tokens counted as output, refusal vs. error, and the read timeout.
+
+**Not done in this slice:** `AiUsageController` or any HTTP surface. Nothing user-facing
+reaches the gateway until 3.2 and 3.4 exist, which is deliberate — the controls were built
+before the thing that spends, not alongside a route that could exercise it.
 
 ### 3.2 Job runner
 

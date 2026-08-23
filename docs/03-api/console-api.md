@@ -31,6 +31,21 @@ Base `/api/v1`. JSON. Firebase ID tokens. URLs lowercase, plural, hyphenated; JS
 
 **Phase 2 is complete: a whole working sandbox can be built without touching SQL.**
 
+### Two error codes with no route yet
+
+Phase 3.1 added `AI_CAPPED` (429) and `AI_UNAVAILABLE` (503) to the catalog. **No endpoint
+emits them today** — the spend controls were built before anything user-facing could reach
+them. They are listed here so that whoever adds the chat and generation routes uses these
+rather than inventing a third:
+
+| Code | Status | Means |
+| --- | --- | --- |
+| `AI_CAPPED` | 429 | a control worked — the kill switch is off, or a daily cost cap is spent. The caller's existing sandboxes are unaffected |
+| `AI_UNAVAILABLE` | 503 | generation is not configured — no active provider, no adapter behind its name, or no API key. Ours to fix, like `AUTH_NOT_CONFIGURED` |
+
+Both return a fixed generic message. The detail that names a variable, a row or a cap goes
+to the log only — see ADR-0009.
+
 ## Notes on what is implemented
 
 **`POST /projects`** returns `baseUrl` — the artifact the user came for. Manually created
