@@ -86,6 +86,30 @@ public class ProjectService {
         return project;
     }
 
+    /**
+     * The three transitions generation owns. Separate from {@link #update} because they are
+     * not the user's to make: a client that could set its own project READY could publish a
+     * half-generated sandbox, and one that could set it GENERATING could stop its own sandbox
+     * serving for no reason.
+     */
+    @Transactional
+    public void markGenerating(UUID accountId, UUID projectId) {
+        require(accountId, projectId).markGenerating();
+        log.info("project.generating projectId={}", projectId);
+    }
+
+    @Transactional
+    public void markReady(UUID accountId, UUID projectId) {
+        require(accountId, projectId).markReady();
+        log.info("project.ready projectId={}", projectId);
+    }
+
+    @Transactional
+    public void markGenerationFailed(UUID accountId, UUID projectId) {
+        require(accountId, projectId).markGenerationFailed();
+        log.info("project.generation.failed projectId={}", projectId);
+    }
+
     @Transactional
     public void archive(UUID accountId, UUID projectId) {
         SandboxProject project = require(accountId, projectId);

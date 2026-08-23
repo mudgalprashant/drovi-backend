@@ -9,6 +9,7 @@ import com.pm.drovi_backend.common.ErrorCode;
 import com.pm.drovi_backend.config.AppConfigService;
 import com.pm.drovi_backend.generation.GenerationJob;
 import com.pm.drovi_backend.generation.JobHandler;
+import com.pm.drovi_backend.generation.JobChain;
 import com.pm.drovi_backend.generation.JobKind;
 import com.pm.drovi_backend.generation.JobRunner;
 import com.pm.drovi_backend.generation.JobStore;
@@ -89,7 +90,7 @@ class GenerationJobRunnerTest extends PostgresTestBase {
 
     @BeforeEach
     void resetTheQueue() {
-        runner = new JobRunner(jobs, config, mapper, List.of(handler));
+        runner = new JobRunner(jobs, config, mapper, JobChain.none(), List.of(handler));
         jdbc.update("DELETE FROM generation_job");
         setConfig("ai.job.runner.enabled", "true");
         setConfig("ai.max.attempts", "3");

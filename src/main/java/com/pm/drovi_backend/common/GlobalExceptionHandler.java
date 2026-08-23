@@ -4,6 +4,7 @@ import com.pm.drovi_backend.runtime.QuotaService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -64,6 +65,21 @@ public class GlobalExceptionHandler {
                 .findFirst()
                 .orElse("request validation failed");
         return render(ErrorCode.VALIDATION_FAILED, detail, request);
+    }
+
+    /**
+     * A body that will not parse is a 400, not a 500 — and without this it was the latter,
+     * for every route in the console API. The caller was told the server had broken when in
+     * fact their JSON had.
+     *
+     * <p>The parse detail is logged, never returned: Jackson's message quotes the offending
+     * input, which for these routes can include a user's pasted documentation.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<Object> handleUnreadableBody(HttpMessageNotReadableException e, HttpServletRequest request) {
+        log.info("api.error.unreadable path={} detail={}", request.getRequestURI(), e.getMessage());
+        return render(ErrorCode.VALIDATION_FAILED,
+                "The request body could not be read as JSON.", request);
     }
 
     @ExceptionHandler(NoHandlerFoundException.class)

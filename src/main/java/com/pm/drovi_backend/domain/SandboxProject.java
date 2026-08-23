@@ -105,6 +105,38 @@ public class SandboxProject {
     }
 
     /**
+     * Generation has started. The sandbox stops serving while it runs — {@link #isServing()}
+     * requires READY — and that is the point: a project's routes and its data should appear
+     * together, not one endpoint at a time as the pipeline gets to them.
+     *
+     * <p>An archived project is left alone. Generating into something the user has thrown away
+     * would quietly bring it back.
+     */
+    public void markGenerating() {
+        if (status != Status.ARCHIVED) {
+            this.status = Status.GENERATING;
+        }
+    }
+
+    /** Generation finished and the sandbox is worth calling. */
+    public void markReady() {
+        if (status == Status.GENERATING || status == Status.DRAFT) {
+            this.status = Status.READY;
+        }
+    }
+
+    /**
+     * Generation gave up. FAILED rather than back to DRAFT, because the two are different
+     * things to see in a list: one is a project waiting to be described, the other is one
+     * whose description did not work out and which the user may want to retry or delete.
+     */
+    public void markGenerationFailed() {
+        if (status == Status.GENERATING) {
+            this.status = Status.FAILED;
+        }
+    }
+
+    /**
      * Soft, deliberately. The sandbox stops serving immediately, but the project's records
      * and request log survive — an archive that destroyed data would make "archive" a word
      * nobody dares click.

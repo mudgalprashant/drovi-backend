@@ -6,6 +6,7 @@ import com.pm.drovi_backend.ai.AiResponse;
 import com.pm.drovi_backend.ai.ProviderConfig;
 import com.pm.drovi_backend.config.AppConfigService;
 import com.pm.drovi_backend.generation.JobHandler;
+import com.pm.drovi_backend.generation.JobChain;
 import com.pm.drovi_backend.generation.JobKind;
 import com.pm.drovi_backend.generation.JobRunner;
 import com.pm.drovi_backend.generation.JobStore;
@@ -106,7 +107,7 @@ class SeedHandlerTest extends PostgresTestBase {
 
     @BeforeEach
     void setUp() {
-        runner = new JobRunner(jobs, config, mapper, handlers);
+        runner = new JobRunner(jobs, config, mapper, JobChain.none(), handlers);
         jdbc.update("DELETE FROM generation_job");
 
         jdbc.update("""

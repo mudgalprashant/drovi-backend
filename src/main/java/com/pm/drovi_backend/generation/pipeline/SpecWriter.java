@@ -95,6 +95,11 @@ public class SpecWriter {
                 "suggestedName", plan.projectName() == null ? "" : plan.projectName(),
                 "authMode", plan.authMode().name(),
                 "collections", plan.collections().stream().map(SpecPlan.Collection::code).toList(),
+                // By id as well as by code, so whatever seeds these does not have to go back to
+                // the database and work out which of a project's collections were SPEC's doing.
+                "collectionIds", collectionIds.entrySet().stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                Map.Entry::getKey, entry -> entry.getValue().toString())),
                 "endpointCount", plan.endpoints().size());
     }
 }

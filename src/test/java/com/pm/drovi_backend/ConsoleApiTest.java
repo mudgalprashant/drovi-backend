@@ -349,6 +349,25 @@ class ConsoleApiTest extends PostgresTestBase {
 
     // --- fixtures ------------------------------------------------------------
 
+    /**
+     * A body that will not parse is the caller's mistake. Until the generation surface was
+     * built this returned <em>500</em> for every route in the console API — the caller was told
+     * the server had broken when in fact their JSON had, which sends them looking in entirely
+     * the wrong place.
+     */
+    @Test
+    void aBodyThatIsNotJson_isABadRequestAndNotAServerError() throws Exception {
+        mvc.perform(post("/api/v1/projects").header("Authorization", "Bearer " + user())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": \"unterminated"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+                // Jackson quotes the offending input in its message, and on some routes that
+                // input is a user's pasted documentation.
+                .andExpect(jsonPath("$.error.message").value(
+                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("unterminated"))));
+    }
+
     private String createProject(String uid, String name) throws Exception {
         String body = mvc.perform(post("/api/v1/projects").header("Authorization", "Bearer " + uid)
                         .contentType(MediaType.APPLICATION_JSON)
