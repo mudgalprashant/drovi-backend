@@ -15,9 +15,10 @@ compiles; it is done when a test proves the behaviour and `./gradlew build` is g
 
 ---
 
-## Phase 1 — Identity and entitlements
+## Phase 1 — Identity and entitlements ✅
 
-**Blocked on a human task:** the Firebase project does not exist. Start it first.
+Built and tested. It goes live the moment `DROVI_FIREBASE_PROJECT_ID` is set; until then
+the console fails closed with `AUTH_NOT_CONFIGURED` and sandboxes are unaffected.
 
 ### 1.1 Token verification
 
