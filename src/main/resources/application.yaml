@@ -31,6 +31,11 @@ spring:
       maximum-pool-size: ${DROVI_DB_POOL_MAX:5}
       minimum-idle: 1
       connection-timeout: 10000
+      # Must be BELOW max-lifetime, or Hikari logs
+      #   "idleTimeout is close to or more than maxLifetime, disabling it"
+      # and silently stops reaping idle connections — which on a shared pooler means
+      # holding connections other clients of the project need.
+      idle-timeout: 120000
       # Must stay below the pooler's own idle timeout, or Hikari hands out a
       # connection the pooler has already closed and the first query fails.
       max-lifetime: 240000
@@ -50,13 +55,28 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    baseline-on-migrate: false
-    # Our notification templates are stored as '${newValue}' strings, and Flyway's
-    # own placeholder syntax is also ${...} — so Flyway tries to substitute them at
-    # migration time and aborts on the first one it cannot resolve. It scans SQL
-    # comments too, so even a commented-out example collides. We use no Flyway
-    # placeholders anywhere, so turning the feature off is the fix; changing the
-    # template syntax would push the same collision onto the rendering code instead.
+
+    # Supabase's `public` schema is NOT empty on a new project, and Flyway refuses to
+    # migrate into a non-empty schema with no history table:
+    #
+    #   Found non-empty schema(s) "public" but no schema history table.
+    #
+    # baseline-on-migrate lets it adopt the existing schema and carry on.
+    baseline-on-migrate: true
+
+    # ⚠️ THIS LINE IS LOAD-BEARING. baseline-version defaults to 1, and Flyway applies
+    # only migrations ABOVE the baseline — so with the default, V1__baseline would be
+    # silently skipped and the app would start against a database with none of our 18
+    # tables. The first failure would be Hibernate's `validate` complaining about a
+    # missing table, which points nowhere near this setting.
+    #
+    # 0 means "baseline is before everything", so V1 onwards all run.
+    baseline-version: 0
+
+    # We use no Flyway placeholders, and Flyway's ${...} syntax collides with anything
+    # that legitimately contains ${} in SQL — including inside comments, which it also
+    # scans. Leaving substitution off removes a whole class of migration failure that
+    # only ever appears at deploy time.
     placeholder-replacement: false
 
   cache:
