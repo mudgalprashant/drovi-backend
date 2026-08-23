@@ -28,6 +28,19 @@ public enum ErrorCode {
     VALIDATION_FAILED("VALIDATION_FAILED", HttpStatus.BAD_REQUEST),
     CONFLICT("CONFLICT", HttpStatus.CONFLICT),
     QUOTA_EXCEEDED("QUOTA_EXCEEDED", HttpStatus.INSUFFICIENT_STORAGE),
+    /**
+     * A spend control refused the work: the AI kill switch is off, or a daily cost cap is
+     * reached. 429 rather than 503 because the honest answer is "not now, try later" — the
+     * service is healthy and the caller's own sandboxes are unaffected.
+     */
+    AI_CAPPED("AI_CAPPED", HttpStatus.TOO_MANY_REQUESTS),
+    /**
+     * Generation cannot run because it is not configured — no active provider row, no
+     * adapter behind the name that row gives, or no API key in the environment. Ours to fix,
+     * like {@link #AUTH_NOT_CONFIGURED}, and deliberately distinct from {@link #AI_CAPPED}:
+     * one means a control worked, this one means nobody finished the setup.
+     */
+    AI_UNAVAILABLE("AI_UNAVAILABLE", HttpStatus.SERVICE_UNAVAILABLE),
     INTERNAL("INTERNAL", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final String code;

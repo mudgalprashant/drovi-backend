@@ -56,10 +56,16 @@ Full rules: [docs/02-implementation/branching-and-workflow.md](docs/02-implement
 | --- | --- |
 | Schema | ✅ 18 tables via Flyway, seeded, verified against real Postgres |
 | Build / deploy | ✅ Boot 4, Java 25, Docker → Render, embedded-Postgres tests |
-| Mock runtime | ✅ routing, rules, data-backed CRUD, auth, quota, request log — 23 tests green |
-| Identity | ❌ Firebase token verification not wired; accounts exist only in the schema |
-| Generation / chat | ❌ no provider adapter yet — `ai_provider_config` is seeded but inactive |
+| Mock runtime | ✅ routing, rules, data-backed CRUD, auth, quota, request log |
+| Identity | ✅ Firebase ID tokens verified as JWTs; deny by default. Needs `DROVI_FIREBASE_PROJECT_ID` to go live, and fails closed without it |
+| Console API | ✅ projects, keys, collections, records, API groups, endpoints, rules, inspector — a whole sandbox with no SQL |
+| Model spend controls | ✅ provider adapter, ledger and caps (Phase 3.1). Testable with no API key |
+| Generation job runner | ✅ claim, retry, backoff (Phase 3.2). **No handlers yet**, so it claims nothing |
+| Generation pipeline | ✅ RESEARCH → SPEC → SEED. Docs recommended, never required (ADR-0010) |
+| Chat, and chaining the steps | ❌ each step is enqueued on its own; nothing joins them yet — Phase 3.4 |
 | Console (web app) | ❌ not started |
+
+170 tests green against a real embedded Postgres.
 
 The runtime is real: seed a project and it serves. What it cannot yet do is
 *generate* one from a chat message — that is the next slice, and it is the one

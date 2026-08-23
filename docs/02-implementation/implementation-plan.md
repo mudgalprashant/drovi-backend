@@ -127,42 +127,191 @@ its ledger and spend caps. Do not ship one without the other.
 
 ## Phase 3 — Generation
 
-### 3.1 The adapter and the ledger — one slice, deliberately
+### 3.1 The adapter and the ledger — one slice, deliberately ✅
 
-Do **not** ship the adapter before the ledger and caps. An adapter that can spend before
-spend can be measured or stopped is the single most expensive mistake available here.
+Shipped together, as required. An adapter that can spend before spend can be measured or
+stopped is the single most expensive mistake available here. Design record: **ADR-0009**.
 
-| Step | Detail |
+| Step | State |
 | --- | --- |
-| `AiProvider` interface | resolved by bean name from `ai_provider_config.adapter_bean` |
-| `geminiProvider` | Gemini's REST API (`generativelanguage.googleapis.com`), key in the `x-goog-api-key` header. **Verify model ids against Google's docs, never memory** — they move fast, and a wrong id fails at request time |
-| `AiCallLedger` | writes an `ai_call` row for **every** call, success or failure |
-| `SpendGuard` | checks the kill switch and both daily caps **before** the call; records `CAPPED` when it refuses |
-| Pricing | resolved from `model_pricing` at the rate in force at call time |
+| `AiProvider` interface | ✅ resolved by bean *name* from `ai_provider_config.adapter_bean`. Implementations are package-private, so nothing can inject one by type |
+| `geminiProvider` | ✅ `integration/gemini/GeminiProvider`. Key in the header the config row names. **Model ids are not in the code** — they come from `app_config` routing, because a wrong id fails at request time and must be fixable with an UPDATE |
+| `AiCallLedger` | ✅ an `ai_call` row for **every** call — OK, ERROR, TIMEOUT, REFUSED and CAPPED. `REQUIRES_NEW`, so a failing job cannot roll back the record of what it spent |
+| `SpendGuard` | ✅ kill switch, then platform daily cap, then account daily cap — cheapest first, so an incident does not gate the kill switch behind a query |
+| `ModelRouter` | ✅ `ai.model.<PURPOSE>` → `ai.model.default` → the provider row's own model |
+| Pricing | ✅ `model_pricing` at the rate in force **at call time**, integer micro-USD throughout |
+| `AiGateway` | ✅ the only caller of an `AiProvider`, and it throws if invoked inside a transaction |
 
 ⚠️ **Never inside a transaction.** Generation takes minutes; a free-tier pool dies holding
-a connection that long. Commit → call → record.
+a connection that long. Commit → call → record. This is now enforced, not just advised:
+`AiGateway.call` checks `TransactionSynchronizationManager` and throws.
 
-**Test:** with `ai.enabled = false`, a generation fails closed with `CAPPED` and makes no
-outbound call. With the cap exceeded, the same. Both write a ledger row.
+Every default fails closed — a missing `ai.enabled` row reads as *off*, a missing cap reads
+as *zero*. See ADR-0009 for why the two failure directions are not symmetric.
 
-### 3.2 Job runner
+**Tested** — 28 tests, no API key and no network:
 
-`generation_job` moves `QUEUED → RUNNING → SUCCEEDED|FAILED`, with `attempt` for retries —
-unparseable model output is a retry, not a failure. In-process `@Scheduled` poller at one
-instance; claim a job with a conditional `UPDATE … WHERE status = 'QUEUED'` so two pollers
-cannot claim the same row.
+- `AiSpendControlsTest` (16) drives the gateway against a stub provider registered the same
+  way a real one is: a row naming a bean. The stub counts its calls, so a cap is asserted as
+  *nothing was sent*, not merely *something was thrown*. Covers the kill switch, both daily
+  caps, the UTC day boundary, cost at the rate in force, a scheduled future price rise, all
+  three fail-closed configuration paths, and the transaction refusal.
+- `GeminiProviderTest` (12) runs the adapter against a real HTTP server on localhost:
+  the system-instruction/contents separation, the auth header, structured output, reasoning
+  tokens counted as output, refusal vs. error, and the read timeout.
+
+**Not done in this slice:** `AiUsageController` or any HTTP surface. Nothing user-facing
+reaches the gateway until 3.2 and 3.4 exist, which is deliberate — the controls were built
+before the thing that spends, not alongside a route that could exercise it.
+
+### 3.2 Job runner ✅
+
+`generation_job` moves `QUEUED → RUNNING → SUCCEEDED|FAILED`, claimed by an in-process
+`@Scheduled` poller. **No handlers yet** — 3.3 supplies them — so the runner claims nothing
+in production today.
+
+| Piece | Detail |
+| --- | --- |
+| `JobStore` | every read and write of `generation_job`, all short transactions |
+| `JobRunner` | one claim per tick, one job in flight. Owns *every* status transition |
+| `JobHandler` | the SPI 3.3 implements. Called with no transaction open |
+| `SchedulingConfig` | `@EnableScheduling`, which Boot does **not** do for you |
+
+**Claiming.** `FOR UPDATE SKIP LOCKED` inside the conditional `WHERE status = 'QUEUED'`.
+Both stop two runners taking the same row, but the plain conditional update makes the loser
+block on the winner's lock and then match nothing — it waits for a write it cannot win.
+
+The claim also **filters on the kinds a handler exists for**. Without that, one queued job
+of an unhandled kind sits at the head of the queue, is re-claimed every tick forever, and
+nothing behind it runs. The full test suite found this; the isolated tests could not.
+
+**`attempt` is incremented at claim, not at failure.** A job that kills its runner every
+time would otherwise be retried forever.
+
+**Three failure classes**, because they want different things:
+
+| Class | Example | Outcome |
+| --- | --- | --- |
+| Retryable | unparseable model output | requeue, bounded by `ai.max.attempts` |
+| Terminal | the model `REFUSED` | `FAILED` at once — asking again spends money to be told no twice |
+| Nobody's fault | spend capped, no provider configured | requeue **without charging an attempt**, and pause |
+
+That third row is the one worth defending. A weekend with the kill switch off must not
+quietly exhaust every queued job's retries and leave them `FAILED` on Monday for a reason
+that had nothing to do with them.
+
+**Pausing** is only for states affecting every job equally. A global pause triggered by one
+unrunnable job is head-of-line blocking wearing a different hat.
+
+**Cadence is a Spring property; the on/off switch is an `app_config` row.** `@Scheduled`
+resolves its interval once at startup and cannot read a table — but the half that matters
+during an incident (`ai.job.runner.enabled`) is ops-changeable, and turning it off leaves
+jobs `QUEUED` rather than failing them.
+
+**Tested** — 20 tests, no API key and no network. `GenerationJobRunnerTest` (19) drives the
+state machine directly against a stub handler. `JobSchedulingTest` (1) is the only test that
+waits on the clock, and it exists because a missing `@EnableScheduling` would leave every
+job `QUEUED` with no error to explain it — the same shape as the inert `@Cacheable`
+annotations already in this codebase. Verified to fail when the annotation is removed.
+
+⚠️ **Still missing: the sweeper.** A runner killed mid-job leaves its row `RUNNING` and
+nothing reclaims it, so `ai.job.timeout.seconds` remains decorative. That is Phase 5.2.
 
 ### 3.3 The pipeline
 
-| Purpose | Produces | Notes |
+| Purpose | Produces | State |
 | --- | --- | --- |
-| RESEARCH | a description of the real product's API surface | grounding is open decision M — supplied docs vs. web search |
-| SPEC | `api_collection`, `api_endpoint`, schemas, envelopes | must set `path_template` **verbatim** |
-| SEED | `sandbox_collection`, `sandbox_record` | quota-checked; **synthetic data only** |
+| RESEARCH | a description of the real product's API surface | ✅ **done** |
+| SPEC | `api_collection`, `api_endpoint`, `sandbox_collection` | ✅ **done** |
+| SEED | `sandbox_record` | ✅ **done** |
+
+⚠️ **Correction to the original table:** it listed `sandbox_collection` under SEED. The
+foreign keys do not allow that — a data-backed `api_endpoint` requires its collection to
+exist, and the database refuses the endpoint otherwise. SPEC declares the collections, which
+are *structure*; SEED fills them with *data*.
+
+#### RESEARCH ✅
+
+Decision M is resolved — **ADR-0010**: documentation is recommended, never required, and
+nothing is ever fetched.
+
+| Input | Behaviour |
+| --- | --- |
+| docs supplied | primary source; outranks the model's recollection |
+| no docs, `agentResearchOnly` set | runs from the model's own knowledge |
+| neither | **fails terminally**, asking for one or the other |
+| `docsUrl` | provenance, shown back to the user. Never fetched |
+
+The opt-in is the point: missing docs and *declined* docs are different requests, and a
+silent fallback would make the recommendation decorative. Findings carry a `confidence` and
+`uncertainties` so a user can see what they traded away.
+
+Supplied docs are truncated to `ai.research.max.docs.chars` before they are billed, and reach
+the model in the user turn — never the system instruction. RESEARCH holds no tools and writes
+to no project table.
+
+Job parameters live in the new `generation_job.input` jsonb column. Every kind needs different
+ones, and encoding them into `prompt` would put a parser between a user's words and the work.
 
 Structured outputs, not free-text parsing. Validate before writing: a malformed spec must
 fail the job, never half-populate a project.
+
+#### SPEC ✅
+
+Three phases in a fixed order, and the order is the design: **call the model with no
+transaction open, validate the whole plan with nothing written, then write all of it in one
+transaction.**
+
+A project with three of its eight routes is worse than one with none — it looks finished, so
+the user integrates against it and meets the rest as 404s from their own code.
+
+`SpecPlan` rejects, before anything is written, what would otherwise surface at request time:
+
+| Rejected | Would otherwise be |
+| --- | --- |
+| a GET with two path params and no stated key | an endpoint that resolves no record, at request time |
+| a duplicate `method + path` | a 409 partway through the write |
+| an endpoint bound to an undeclared collection | a composite-key violation after earlier rows landed |
+| no collections, or no endpoints | a project that serves nothing |
+
+Writing goes through `ApiSpecService` and `SandboxDataService`, not the repositories — they
+already enforce ownership, plan limits, verbatim paths and same-project binding, and a second
+write path is one that eventually stops checking something the first one checks.
+
+Three boundaries worth keeping:
+
+- **Generation never creates a project.** `ProjectService.create` is where the plan's project
+  limit is enforced; a pipeline that could conjure projects would route around it. A SPEC job
+  with no project fails terminally, before the model is called.
+- **Generation never renames one either.** The user chose that name. The model's suggestion is
+  returned for the console to offer.
+- **Auth mode *is* set from research** — that is a property of the imitation, not a user
+  preference. A replica that waves everything through never exercises the caller's auth path.
+
+The plan's endpoint ceiling is told to the model as well as enforced after it. A model that
+knows the limit picks the endpoints that matter; one that does not produces forty and has half
+rejected.
+
+#### SEED ✅
+
+**One collection per job.** That is the pacing, not a limitation: the free tier allows 15
+requests a minute, the runner takes one job per tick, and a handler looping over eight
+collections would defeat both. A failing collection also retries alone.
+
+The response schema is built from the `recordSchema` SPEC produced, so records share the
+collection's fields rather than each inventing their own.
+
+| Guard | Why |
+| --- | --- |
+| duplicate ids within a batch → retry | both rows would be written; `RecordWriter` checks the database, and neither is in it yet |
+| a full project → **terminal** | the next attempt writes the same rows into the same full project |
+| record count clamped to `ai.seed.records.max` | model-generated rows are billed per token |
+
+⚠️ **Synthetic data is enforced by instruction, not by a check**, and that is stated rather
+than implied. There is no structural control where the step's job is to invent content, and
+the obvious mechanical check — rejecting Luhn-valid card numbers — would reject exactly the
+values a faithful Stripe mock *should* contain. The prompt names the published test-value
+convention instead.
 
 ### 3.4 Chat and the tool surface
 

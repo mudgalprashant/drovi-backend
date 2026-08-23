@@ -111,27 +111,53 @@ batch, and it must check quota *before* the insert, not after.
 
 ---
 
-## Phase 3 — Generation
+## Phase 3 — Generation  🟡 in progress
 
 **Goal:** the headline feature. Describe a product in chat; get a sandbox.
 
 | Deliverable | Detail |
 | --- | --- |
-| Provider adapter | `geminiProvider`, resolved from `ai_provider_config` |
-| Ledger and caps | every call recorded; kill switch and daily caps enforced **before** the call |
-| Pipeline | RESEARCH → SPEC → SEED as `generation_job`s with retries |
-| Chat | threads, messages, and a tool surface that can only touch the project in scope |
-| REVISE | "make five customers' cards blocked" applied to an existing sandbox |
+| Provider adapter | ✅ `geminiProvider`, resolved by bean name from `ai_provider_config` |
+| Ledger and caps | ✅ every call recorded; kill switch and daily caps enforced **before** the call. ADR-0009 |
+| Job runner | ✅ claim, retry, and the three failure classes |
+| Pipeline | ✅ RESEARCH · SPEC · SEED |
+| Chat | ❌ threads, messages, and a tool surface that can only touch the project in scope |
+| REVISE | ❌ "make five customers' cards blocked" applied to an existing sandbox |
+
+**3.1 and 3.2 are done, and 3.1 was the risky half.** The spending machinery exists, is
+enforced, and is proved by tests that need no API key — because a stub provider registers
+exactly as a real one does. The runner that will drive it is built and its state machine is
+tested, but it has no handlers, so nothing runs and nothing user-facing can reach it yet.
+That is the intended order.
+
+**Decision M is settled** (ADR-0010): documentation is recommended, never required, and
+nothing is ever fetched. A user either supplies docs or explicitly opts into having the agent
+work from its own knowledge — and because accuracy is now something they can trade away,
+research reports how confident it is and what to check.
+
+**3.3 is complete.** A RESEARCH job produces findings, a SPEC job turns them into routes and
+the collections behind them, and a SEED job fills one of those collections — after which the
+sandbox's base URL serves generated data.
+
+What is missing is the thing that *joins* them. Each step is enqueued on its own today;
+nothing chains RESEARCH → SPEC → SEED, and nothing promotes a project from `DRAFT` to `READY`
+when the chain finishes. That, and the chat surface that starts it, is 3.4.
 
 **Exit criteria:** from one sentence — *"mimic Stripe's card API"* — a project reaches
 `READY` with endpoints, schemas and seed data, and its base URL serves them.
 
 **The two risks that matter here**, both called out in the security docs:
 
-1. **Spend.** Caps and the kill switch must work *before* the first real generation, not
-   after the first surprise bill. Build them in the same change as the adapter.
-2. **Prompt injection.** Researched content is untrusted input reaching a model that holds
-   database tools. Scope the tool surface structurally — a system prompt is not a control.
+1. **Spend.** ✅ Handled in 3.1. Caps and the kill switch work *before* the first real
+   generation rather than after the first surprise bill, and every default fails closed.
+   What remains is that they are *ceilings, not reservations*: a call that starts under the
+   cap finishes above it by at most one call's worth. Set a cap below what you can afford to
+   lose, not at it.
+2. **Prompt injection.** 🟡 The structural half is in place — the adapter keeps Drovi's own
+   words in the provider's system-instruction field and everything user- or web-derived in
+   `contents`, and a test asserts the separation. The hard half is still ahead: the tool
+   surface in 3.4 must be unable to reach another project, a plan, a quota or `app_config`
+   *by its signatures*. A system prompt is not a control.
 
 ---
 
