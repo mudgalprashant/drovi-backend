@@ -68,6 +68,21 @@ spring:
     virtual:
       enabled: true
 
+# Firebase owns identity: we verify ID tokens and never issue them.
+#
+# project-id is deliberately NOT defaulted here. Spring binds it from the
+# DROVI_FIREBASE_PROJECT_ID environment variable, and its ABSENCE is meaningful:
+# with no project configured there is no JwtDecoder, and every console route
+# fails closed with AUTH_NOT_CONFIGURED. Writing `${DROVI_FIREBASE_PROJECT_ID:}`
+# here would defeat that -- the property would be present but blank, and the
+# decoder would be built for a project named "".
+#
+# No service-account credential is needed to VERIFY a token: Firebase ID tokens
+# are RS256 JWTs signed with keys Google publishes as a JWK set.
+# drovi:
+#   firebase:
+#     project-id: set-via-DROVI_FIREBASE_PROJECT_ID
+
 server:
   port: ${DROVI_PORT:8080}
   shutdown: graceful
