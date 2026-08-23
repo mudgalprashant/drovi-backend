@@ -37,7 +37,7 @@ drovi-backend/
 | A new rule matcher section | `RuleEngine.matches` |
 | A new envelope placeholder | the `values` map in `SandboxRuntime` — `TemplateRenderer` needs no change |
 | A new tunable | an `app_config` row in a migration + one `config.getInt/getBoolean` call |
-| Anything Anthropic-shaped | a future `integration/anthropic/` package, and nowhere else |
+| Anything Gemini-shaped | a future `integration/gemini/` package, and nowhere else |
 | A schema change | a new `db/migration/V<n>__<desc>.sql` |
 
 ## Not every table has an entity

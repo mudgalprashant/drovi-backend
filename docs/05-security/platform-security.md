@@ -26,7 +26,7 @@ grows; Vault only when dynamic DB credentials justify the operational weight.
 
 | Credential | Why it is top-tier | Compromise means |
 | --- | --- | --- |
-| `DROVI_ANTHROPIC_API_KEY` | metered spend with no natural ceiling | an unbounded bill, and generation on your account |
+| `DROVI_GEMINI_API_KEY` | metered spend with no natural ceiling | an unbounded bill, and generation on your account |
 | Production DB credentials | every tenant's sandbox data at once | full multi-tenant breach |
 | Firebase service credentials | identity for every account | full impersonation |
 | Static CI cloud credentials | everything the pipeline can reach | full infrastructure compromise |

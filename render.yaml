@@ -21,7 +21,7 @@ services:
         sync: false
       - key: DROVI_FIREBASE_PROJECT_ID
         sync: false
-      - key: DROVI_ANTHROPIC_API_KEY
+      - key: DROVI_GEMINI_API_KEY
         sync: false
       - key: DROVI_PUBLIC_BASE_URL
         sync: false

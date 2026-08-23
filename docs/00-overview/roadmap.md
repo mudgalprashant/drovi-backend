@@ -115,7 +115,7 @@ batch, and it must check quota *before* the insert, not after.
 
 | Deliverable | Detail |
 | --- | --- |
-| Provider adapter | `anthropicProvider`, resolved from `ai_provider_config` |
+| Provider adapter | `geminiProvider`, resolved from `ai_provider_config` |
 | Ledger and caps | every call recorded; kill switch and daily caps enforced **before** the call |
 | Pipeline | RESEARCH → SPEC → SEED as `generation_job`s with retries |
 | Chat | threads, messages, and a tool surface that can only touch the project in scope |
