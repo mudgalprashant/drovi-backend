@@ -61,11 +61,11 @@ Full rules: [docs/02-implementation/branching-and-workflow.md](docs/02-implement
 | Console API | ✅ projects, keys, collections, records, API groups, endpoints, rules, inspector — a whole sandbox with no SQL |
 | Model spend controls | ✅ provider adapter, ledger and caps (Phase 3.1). Testable with no API key |
 | Generation job runner | ✅ claim, retry, backoff (Phase 3.2). **No handlers yet**, so it claims nothing |
-| Generation pipeline | 🟡 RESEARCH ✅ — docs recommended, never required (ADR-0010). SPEC and SEED still to come |
-| Chat | ❌ no threads, no tool surface, no HTTP surface — Phase 3.4 |
+| Generation pipeline | ✅ RESEARCH → SPEC → SEED. Docs recommended, never required (ADR-0010) |
+| Chat, and chaining the steps | ❌ each step is enqueued on its own; nothing joins them yet — Phase 3.4 |
 | Console (web app) | ❌ not started |
 
-138 tests green against a real embedded Postgres.
+170 tests green against a real embedded Postgres.
 
 The runtime is real: seed a project and it serves. What it cannot yet do is
 *generate* one from a chat message — that is the next slice, and it is the one

@@ -4,6 +4,8 @@ import com.pm.drovi_backend.ai.AiCappedException;
 import com.pm.drovi_backend.ai.AiProviderException;
 import com.pm.drovi_backend.ai.AiCallStatus;
 import com.pm.drovi_backend.ai.AiUnavailableException;
+import com.pm.drovi_backend.common.DroviException;
+import com.pm.drovi_backend.common.ErrorCode;
 import com.pm.drovi_backend.config.AppConfigService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -170,6 +172,24 @@ public class JobRunner {
                         "The model declined to generate this. Try describing the product differently.");
             } else {
                 retryOrFail(job, "PROVIDER_ERROR", "The model call did not complete.");
+            }
+
+        } catch (DroviException e) {
+            // A deliberate refusal from the console's own services — no such collection, not
+            // yours, over your plan's limit. These arrived here as "unexpected", which meant
+            // three attempts to discover that a missing collection is still missing, and a
+            // job that finally failed with INTERNAL rather than with the reason.
+            //
+            // Terminal, except INTERNAL: those are the ones thrown when something we do could
+            // plausibly succeed on a second go, such as failing to allocate a unique key.
+            // DroviException messages are already written to be shown to a caller, so the
+            // message carries through rather than being replaced by a generic one.
+            if (e.getErrorCode() == ErrorCode.INTERNAL) {
+                log.warn("job.internal jobId={} detail={}", job.id(), e.getMessage());
+                retryOrFail(job, ErrorCode.INTERNAL.code(), "Something went wrong while generating this.");
+            } else {
+                log.info("job.refused jobId={} errorCode={}", job.id(), e.getErrorCode().code());
+                jobs.fail(job.id(), e.getErrorCode().code(), e.getMessage());
             }
 
         } catch (TerminalJobException e) {

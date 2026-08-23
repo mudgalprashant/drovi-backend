@@ -120,7 +120,7 @@ batch, and it must check quota *before* the insert, not after.
 | Provider adapter | ✅ `geminiProvider`, resolved by bean name from `ai_provider_config` |
 | Ledger and caps | ✅ every call recorded; kill switch and daily caps enforced **before** the call. ADR-0009 |
 | Job runner | ✅ claim, retry, and the three failure classes |
-| Pipeline | 🟡 RESEARCH ✅ · SPEC ❌ · SEED ❌ |
+| Pipeline | ✅ RESEARCH · SPEC · SEED |
 | Chat | ❌ threads, messages, and a tool surface that can only touch the project in scope |
 | REVISE | ❌ "make five customers' cards blocked" applied to an existing sandbox |
 
@@ -135,9 +135,13 @@ nothing is ever fetched. A user either supplies docs or explicitly opts into hav
 work from its own knowledge — and because accuracy is now something they can trade away,
 research reports how confident it is and what to check.
 
-What remains in 3.3 is SPEC and SEED: turning findings into routes and records. That is where
-generation starts *writing to a project*, and where "a malformed spec must fail the job, never
-half-populate a project" starts to bite.
+**3.3 is complete.** A RESEARCH job produces findings, a SPEC job turns them into routes and
+the collections behind them, and a SEED job fills one of those collections — after which the
+sandbox's base URL serves generated data.
+
+What is missing is the thing that *joins* them. Each step is enqueued on its own today;
+nothing chains RESEARCH → SPEC → SEED, and nothing promotes a project from `DRAFT` to `READY`
+when the chain finishes. That, and the chat surface that starts it, is 3.4.
 
 **Exit criteria:** from one sentence — *"mimic Stripe's card API"* — a project reaches
 `READY` with endpoints, schemas and seed data, and its base URL serves them.

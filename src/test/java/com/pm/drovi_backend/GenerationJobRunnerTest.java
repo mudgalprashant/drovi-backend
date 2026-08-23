@@ -4,6 +4,8 @@ import com.pm.drovi_backend.ai.AiCallStatus;
 import com.pm.drovi_backend.ai.AiCappedException;
 import com.pm.drovi_backend.ai.AiProviderException;
 import com.pm.drovi_backend.ai.AiUnavailableException;
+import com.pm.drovi_backend.common.DroviException;
+import com.pm.drovi_backend.common.ErrorCode;
 import com.pm.drovi_backend.config.AppConfigService;
 import com.pm.drovi_backend.generation.GenerationJob;
 import com.pm.drovi_backend.generation.JobHandler;
@@ -281,6 +283,44 @@ class GenerationJobRunnerTest extends PostgresTestBase {
         runner.claimAndRunOne();
 
         assertThat(statusOf(job)).isEqualTo("QUEUED");
+    }
+
+    /**
+     * A refusal from the console's own services — no such collection, not yours, over your
+     * plan's limit — is terminal. These used to arrive as "unexpected", which meant three
+     * attempts to discover that a missing collection is still missing, and a job that finally
+     * failed with INTERNAL rather than with the reason. Found by SeedHandlerTest.
+     */
+    @Test
+    void claimAndRunOne_whenAServiceRefuses_failsWithThatReasonRatherThanRetrying() {
+        UUID job = enqueue(JobKind.RESEARCH).id();
+        handler.behaviour = j -> {
+            throw DroviException.notFound("No such data collection.");
+        };
+
+        runner.claimAndRunOne();
+
+        assertThat(statusOf(job)).isEqualTo("FAILED");
+        assertThat(errorCodeOf(job)).isEqualTo("NOT_FOUND");
+        assertThat(errorMessageOf(job)).isEqualTo("No such data collection.");
+        assertThat(attemptOf(job)).isEqualTo(1);
+    }
+
+    /**
+     * The exception to that rule. An INTERNAL DroviException is thrown where a second go could
+     * plausibly work — allocating a unique key, for instance — so it keeps its retries.
+     */
+    @Test
+    void claimAndRunOne_whenAServiceFailsInternally_stillRetries() {
+        UUID job = enqueue(JobKind.RESEARCH).id();
+        handler.behaviour = j -> {
+            throw new DroviException(ErrorCode.INTERNAL, "Could not allocate a project key.");
+        };
+
+        runner.claimAndRunOne();
+
+        assertThat(statusOf(job)).isEqualTo("QUEUED");
+        assertThat(errorMessageOf(job)).doesNotContain("project key");
     }
 
     @Test
