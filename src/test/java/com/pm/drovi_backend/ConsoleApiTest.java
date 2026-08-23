@@ -232,8 +232,10 @@ class ConsoleApiTest extends PostgresTestBase {
     /**
      * The point of the phase: seed data through the console, and the sandbox serves it.
      *
-     * <p>The endpoint is still inserted by SQL because endpoint management is Phase 2.4 —
-     * that gap is exactly what this test makes visible.
+     * <p>The route here is still inserted by SQL, deliberately: this test covers the data
+     * path alone, and building a route through the API would couple it to the endpoint
+     * surface it is not testing. {@code EndpointsAndRulesTest} proves the whole loop with
+     * no SQL at all.
      */
     @Test
     void dataSeededThroughTheConsole_isServedByTheSandbox() throws Exception {
@@ -377,7 +379,7 @@ class ConsoleApiTest extends PostgresTestBase {
         jdbc.update("UPDATE sandbox_project SET auth_mode = 'NONE' WHERE id = ?::uuid", projectId);
     }
 
-    /** Endpoint management is Phase 2.4; until then a route is wired by SQL. */
+    /** Wired by SQL on purpose — see the note above. */
     private void wireGetEndpoint(String projectId, String collectionId) {
         UUID apiCollection = jdbc.queryForObject("""
                 INSERT INTO api_collection (project_id, name) VALUES (?::uuid, 'Cards') RETURNING id

@@ -94,4 +94,68 @@ public class ApiEndpoint {
 
     protected ApiEndpoint() {
     }
+
+    /**
+     * {@code specificity} is deliberately absent: it is a generated column, computed by the
+     * database from {@code path_template}. It decides which template wins when two match,
+     * and generating it is what stops a writer getting that ordering wrong.
+     */
+    public static ApiEndpoint create(UUID projectId, UUID collectionId, String method,
+                                     String pathTemplate, String summary, String description,
+                                     Behavior behavior, UUID dataCollectionId, String keyParam,
+                                     Map<String, Object> requestSchema, Map<String, Object> responseSchema,
+                                     Map<String, Object> responseTemplate, Integer successStatus) {
+        ApiEndpoint endpoint = new ApiEndpoint();
+        endpoint.projectId = projectId;
+        endpoint.collectionId = collectionId;
+        endpoint.method = method;
+        endpoint.pathTemplate = pathTemplate;
+        endpoint.summary = summary;
+        endpoint.description = description;
+        endpoint.behavior = behavior == null ? Behavior.STATIC : behavior;
+        endpoint.dataCollectionId = dataCollectionId;
+        endpoint.keyParam = keyParam;
+        endpoint.requestSchema = requestSchema == null ? Map.of() : requestSchema;
+        endpoint.responseSchema = responseSchema == null ? Map.of() : responseSchema;
+        endpoint.responseTemplate = responseTemplate == null ? Map.of() : responseTemplate;
+        endpoint.successStatus = successStatus == null ? 200 : successStatus;
+        return endpoint;
+    }
+
+    /**
+     * Sparse update. {@code method} and {@code pathTemplate} are editable because a
+     * generated spec often gets a path slightly wrong, and correcting it must not mean
+     * deleting and recreating the endpoint along with its rules.
+     */
+    public void update(String method, String pathTemplate, String summary, String description,
+                       Behavior behavior, UUID dataCollectionId, String keyParam,
+                       Map<String, Object> responseTemplate, Integer successStatus) {
+        if (method != null) {
+            this.method = method;
+        }
+        if (pathTemplate != null) {
+            this.pathTemplate = pathTemplate;
+        }
+        if (summary != null) {
+            this.summary = summary;
+        }
+        if (description != null) {
+            this.description = description;
+        }
+        if (behavior != null) {
+            this.behavior = behavior;
+        }
+        if (dataCollectionId != null) {
+            this.dataCollectionId = dataCollectionId;
+        }
+        if (keyParam != null) {
+            this.keyParam = keyParam;
+        }
+        if (responseTemplate != null) {
+            this.responseTemplate = responseTemplate;
+        }
+        if (successStatus != null) {
+            this.successStatus = successStatus;
+        }
+    }
 }
