@@ -10,9 +10,9 @@ import java.util.UUID;
 /**
  * The three things that can stop a model call, checked <em>before</em> it is made.
  *
- * <p>Order matters and is cheapest-first: the kill switch is a cached config read, the two
- * caps are aggregate queries. An incident is exactly when you do not want the kill switch
- * to be gated behind a database round trip.
+ * <p>Order matters and is cheapest-first: the kill switch is a single-row config read, the
+ * two caps are aggregate queries over {@code ai_call}. An incident is exactly when you do not
+ * want the kill switch gated behind the more expensive checks.
  *
  * <p>All three controls live in {@code app_config} rather than in this file, so an operator
  * can stop spending at 3am with an UPDATE. That is the reason invariant 3 puts them in the

@@ -21,8 +21,16 @@ import java.util.Optional;
  * naming a bean nobody implements, and a row naming an environment variable nobody set.
  * Each gets its own message, because the fix for each is different.
  *
- * <p>The configuration is cached; the key is not. A cached credential survives a rotation,
- * which turns "rotate the key" into "rotate the key and redeploy".
+ * <p>The configuration is annotated for caching; the key deliberately is not. A cached
+ * credential survives a rotation, which turns "rotate the key" into "rotate the key and
+ * redeploy".
+ *
+ * <p>⚠️ The {@code @Cacheable} below is currently <strong>inert</strong>: nothing in this
+ * application declares {@code @EnableCaching}, so no caching proxy is created and every read
+ * hits the database. That is a pre-existing gap across the whole app, not a property of this
+ * class — see {@code state/open-threads.md} thread Q. Nothing here depends on which way it
+ * is resolved, and {@link #refresh()} is called regardless so the switch stays correct once
+ * caching is turned on.
  */
 @Service
 @RequiredArgsConstructor
