@@ -1,0 +1,6 @@
+# Every PR requires review from the repository owner.
+#
+# This is the control that keeps merges in one pair of hands: combined with
+# "Require review from Code Owners" in branch protection, no PR can merge
+# without @mudgalprashant approving it.
+* @mudgalprashant
