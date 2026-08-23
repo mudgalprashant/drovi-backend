@@ -2,6 +2,7 @@ package com.pm.drovi_backend;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import com.pm.drovi_backend.config.DatabaseUrlPreflight;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
@@ -9,6 +10,9 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 public class DroviBackendApplication {
 
 	public static void main(String[] args) {
+		// Before Spring, because the failure this catches happens while the datasource is
+		// being built -- earlier than any bean of ours could report it.
+		DatabaseUrlPreflight.verifyOrExit(System.getenv("DROVI_DB_URL"));
 		SpringApplication.run(DroviBackendApplication.class, args);
 	}
 
