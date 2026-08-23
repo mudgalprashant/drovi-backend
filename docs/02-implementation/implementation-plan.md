@@ -21,20 +21,25 @@ compiles; it is done when a test proves the behaviour and `./gradlew build` is g
 
 ### 1.1 Token verification
 
+✅ **Done.** Implemented as an OAuth2 resource server against Firebase's JWK set rather
+than the Admin SDK — see ADR-0006. Verification needs only the project id.
+
 | Step | Detail |
 | --- | --- |
-| Add `firebase-admin` | pinned version; no floating ranges |
-| `FirebaseAuthFilter` | verifies the ID token, puts a `DroviPrincipal` in the security context |
-| Config | `DROVI_FIREBASE_PROJECT_ID`, `DROVI_FIREBASE_CREDENTIALS_B64` |
+| Decoder | `NimbusJwtDecoder` + issuer and **audience** validation (`SecurityConfig`) |
+| Config | `DROVI_FIREBASE_PROJECT_ID` only — no service-account credential |
 | Route rules | **deny by default.** `/s/**` and `/actuator/health` are the only anonymous paths, each with a stated reason |
+| Unconfigured | no project id → no decoder → `AUTH_NOT_CONFIGURED` on every console route |
 
 ⚠️ `/s/**` must be excluded explicitly. It has its own authentication (project API keys)
 and must never be subjected to Firebase auth — that would break every user's integration.
 
-**Test:** a valid token resolves a principal; an expired one, one from another project, and
-a missing one each 401. `/s/**` is unaffected.
+**Tested:** `IdentityTest` (8) and `AuthNotConfiguredTest` (3). Signature and audience
+validation is Spring Security's and is not re-tested; what is tested is everything after
+verification — provisioning, the race, entitlements, deny-by-default, suspension, and that
+`/s/**` is unaffected.
 
-### 1.2 Implicit account provisioning
+### 1.2 Implicit account provisioning ✅
 
 An `accounts` row is created on first authenticated call — no signup endpoint.
 
@@ -42,19 +47,24 @@ Race: two concurrent first calls. Insert and catch the unique violation on
 `accounts_firebase_uid_uk`; treat the violation as success. Do **not** convert this to
 SELECT-then-INSERT — that reintroduces the race the index closes.
 
-### 1.3 `/me` and entitlements
+### 1.3 `/me` and entitlements ✅
 
 `GET /me`, `GET /me/entitlements` reading `plan_catalog`. **Never** accept a limit from the
 client.
 
-### 1.4 Error envelope
+### 1.4 Error envelope ✅
 
 One `@RestControllerAdvice`, stable codes, correlation id in every response. 5xx bodies
 carry a generic message and the correlation id — never a stack trace or an upstream
 message.
 
 **Phase exit:** sign in with a real Firebase user, `GET /me` returns the account and plan,
-every other console route 401s without a token.
+every other console route 401s without a token. ⏳ **Waiting only on a Firebase project id**
+— set `DROVI_FIREBASE_PROJECT_ID` and this is live.
+
+One thing deliberately deferred: `account_usage_month` rollups. They belong with the
+monthly caps in Phase 6, and writing the counters before anything reads them would be
+machinery nobody exercises.
 
 ---
 
@@ -63,7 +73,7 @@ every other console route 401s without a token.
 Entities exist for only 5 of 18 tables. This phase adds the rest, or reaches them with
 `JdbcTemplate` — decide per table, and do not add an entity nothing needs.
 
-### 2.1 Projects
+### 2.1 Projects ✅
 
 `POST/GET /api/v1/projects`, `GET/PATCH/DELETE /api/v1/projects/{id}`.
 
@@ -74,7 +84,7 @@ Entities exist for only 5 of 18 tables. This phase adds the rest, or reaches the
 | Plan limit | `max_projects` checked at create |
 | Archive | soft; `isServing()` already gates the runtime |
 
-### 2.2 API keys
+### 2.2 API keys ✅
 
 `POST /api/v1/projects/{id}/keys`, `DELETE .../keys/{keyId}`.
 
@@ -82,7 +92,7 @@ The raw key is returned **once**, in the create response, and never stored — o
 `key_hash` (SHA-256) and `key_prefix`. Reuse `SandboxAuthenticator.sha256` so issuing and
 verifying can never disagree.
 
-### 2.3 Data collections and records
+### 2.3 Data collections and records ✅
 
 CRUD plus **bulk seed**, the highest-volume write path in the system.
 
@@ -93,7 +103,7 @@ CRUD plus **bulk seed**, the highest-volume write path in the system.
 | `record_key` | derived from `key_field`, written back into the payload |
 | Counters | never touched from Java — the trigger owns them |
 
-### 2.4 Spec and rules
+### 2.4 Spec and rules ⬅ **next**
 
 Read endpoints for API groups, endpoints and schemas. Write endpoints for rules: create,
 reorder (priority), enable/disable, set `remaining_uses`.
@@ -105,6 +115,11 @@ Keyset, not offset: this is the fastest-growing table and offset paging degrades
 
 **Phase exit:** create a project, seed data, add a rule, call the sandbox, see the call in
 the inspector — all over HTTP, no SQL.
+
+🟡 **Halfway.** Projects, keys, collections and records are done and tested end to end —
+data seeded through the console is served by the sandbox. What is still missing is endpoint
+management, so a console-created project has no routes and answers 404 until 2.4 lands.
+That gap is deliberately visible in `ConsoleApiTest`, which still inserts a route by SQL.
 
 ---
 
@@ -118,7 +133,7 @@ spend can be measured or stopped is the single most expensive mistake available 
 | Step | Detail |
 | --- | --- |
 | `AiProvider` interface | resolved by bean name from `ai_provider_config.adapter_bean` |
-| `anthropicProvider` | uses the official Anthropic SDK; consult the `claude-api` skill for current model ids and shapes rather than memory |
+| `geminiProvider` | Gemini's REST API (`generativelanguage.googleapis.com`), key in the `x-goog-api-key` header. **Verify model ids against Google's docs, never memory** — they move fast, and a wrong id fails at request time |
 | `AiCallLedger` | writes an `ai_call` row for **every** call, success or failure |
 | `SpendGuard` | checks the kill switch and both daily caps **before** the call; records `CAPPED` when it refuses |
 | Pricing | resolved from `model_pricing` at the rate in force at call time |

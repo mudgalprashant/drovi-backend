@@ -62,4 +62,34 @@ public class SandboxCollection {
 
     protected SandboxCollection() {
     }
+
+    public static SandboxCollection create(UUID projectId, String code, String displayName,
+                                           String description, Map<String, Object> recordSchema,
+                                           String keyField) {
+        SandboxCollection collection = new SandboxCollection();
+        collection.projectId = projectId;
+        collection.code = code;
+        collection.displayName = displayName;
+        collection.description = description;
+        collection.recordSchema = recordSchema == null ? Map.of() : recordSchema;
+        collection.keyField = keyField == null || keyField.isBlank() ? "id" : keyField;
+        return collection;
+    }
+
+    /**
+     * {@code keyField} is deliberately not updatable. Changing it would silently orphan
+     * every existing record, because {@code record_key} was extracted using the old one and
+     * lookups would start missing rows that are plainly there.
+     */
+    public void update(String displayName, String description, Map<String, Object> recordSchema) {
+        if (displayName != null) {
+            this.displayName = displayName;
+        }
+        if (description != null) {
+            this.description = description;
+        }
+        if (recordSchema != null) {
+            this.recordSchema = recordSchema;
+        }
+    }
 }

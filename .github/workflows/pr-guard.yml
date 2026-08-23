@@ -1,0 +1,31 @@
+name: PR guard
+
+# GitHub cannot restrict WHO opens a pull request. It can only restrict who
+# merges. This workflow is the substitute: a PR into the release branch that
+# did not come from `dev` fails its check, so it cannot satisfy a required
+# status check and cannot be merged.
+#
+# Runs on pull_request (not pull_request_target) so a fork's code never runs
+# with write permissions.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-prs-come-from-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only `dev` may target `main`
+        run: |
+          echo "head: ${{ github.head_ref }}  →  base: ${{ github.base_ref }}"
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "::error::A pull request into 'main' may only come from 'dev'."
+            echo "::error::Branch off 'dev' and open your PR into 'dev' instead:"
+            echo "::error::  git checkout dev && git pull && git checkout -b feat/<name>"
+            exit 1
+          fi
+          echo "OK — release PR from dev."

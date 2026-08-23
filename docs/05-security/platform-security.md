@@ -12,25 +12,65 @@ prompt injection, spend. This file covers everything under it.
 ## Secrets
 
 INVARIANT: the app **fails to start** when a required secret is missing — never a default.
-INVARIANT: the bootstrap credential is never baked into the image; prefer workload
-identity/OIDC so there is nothing to leak.
 INVARIANT: every secret is rotatable **without downtime** — publish new alongside old →
-switch → revoke old after the longest dependent TTL. If a secret cannot be rotated that
-way, that is a design defect to fix *before* it becomes an incident.
+switch → revoke old. If a secret cannot be rotated that way, that is a design defect to fix
+*before* it becomes an incident.
+INVARIANT: **no secret value in any repo** — not in code, config, tests, docs, fixtures or
+commit messages.
 
-Today secrets live in the Render dashboard, declared in `render.yaml` with `sync: false`
-("prompt me, never store in git"). A cloud secret manager is the next step if the surface
-grows; Vault only when dynamic DB credentials justify the operational weight.
+### Where they live
+
+Two encrypted stores, neither in git (ADR-0007). Operational detail, including the
+step-by-step and the rotation runbook, is in `dev-ops/docs/secrets.md`.
+
+| Store | Holds |
+| --- | --- |
+| **Render → Environment** | everything the running service needs |
+| **GitHub → Environment `production`** | anything CI needs, behind required reviewers |
+
+**No external vault.** Not because one would be worse, but because at this size it would
+add a bootstrap credential without removing a real risk: a vault needs a token to read it,
+so "no secrets anywhere" is never achievable — you only choose where the last one lives.
+Here the last one is an MFA-protected Render login that never touches disk. ADR-0007 lists
+the triggers for revisiting.
+
+### Never a repository secret
+
+CI secrets go in a GitHub **Environment** with required reviewers, never a repository
+secret. A repository secret is readable by *any* workflow, including one added in a pull
+request from a fork — and against a public repo, a PR that adds a workflow printing every
+secret it can see is the first move an attacker makes.
+
+### Not everything called config is a secret
+
+Treating a non-secret as secret has its own cost: it ends up in one dashboard, undocumented,
+and nobody can reproduce a local run. `DROVI_FIREBASE_PROJECT_ID` is **not** a secret — it
+appears in every web client's config, and verification needs no service-account credential
+(ADR-0006). There is no Firebase credential in this system to protect.
+
+### Production credentials never land on a laptop
+
+Local work needs none of them: the tests start their own Postgres, identity needs only a
+non-secret project id, and generation should use a separate low-limit key. This removes the
+entire class of "my machine was compromised" incidents rather than mitigating it.
 
 ### Highest-consequence credentials
 
 | Credential | Why it is top-tier | Compromise means |
 | --- | --- | --- |
-| `DROVI_ANTHROPIC_API_KEY` | metered spend with no natural ceiling | an unbounded bill, and generation on your account |
+| `DROVI_GEMINI_API_KEY` | metered spend with no natural ceiling | an unbounded bill, and generation on your account |
 | Production DB credentials | every tenant's sandbox data at once | full multi-tenant breach |
-| Firebase service credentials | identity for every account | full impersonation |
 | Static CI cloud credentials | everything the pipeline can reach | full infrastructure compromise |
+| Your Render login | every production secret at once | everything above, together — **MFA is not optional here** |
 | A project API key | one sandbox | limited — but users reuse keys across systems, so treat it as real |
+
+There is deliberately **no Firebase credential** on this list. Verifying an ID token needs
+only the project id (ADR-0006), so the highest-value credential in most Firebase
+deployments simply does not exist here.
+
+Note what moved to the top as a consequence of ADR-0007: with secrets in Render's
+environment, **the Render login is now the credential that unlocks the others.** That is the
+honest trade — fewer moving parts, one account that matters more.
 
 ## Database hardening
 

@@ -33,7 +33,7 @@ flowchart LR
     RT[Mock runtime] --> DB[(Postgres)]
     API[Console API] --> DB
     GEN[Generation] --> DB
-    GEN -->|HTTPS| AI[Anthropic]
+    GEN -->|HTTPS| AI[Google Gemini]
     API --> GEN
 ```
 

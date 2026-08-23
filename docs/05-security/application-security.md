@@ -30,19 +30,35 @@ Guarded by `SchemaInvariantsTest.record_attachedToAnotherProjectsCollection_reje
 
 ## 2. Two authentication systems, never confused
 
-| Surface | Caller | Credential |
-| --- | --- | --- |
-| Console `/api/v1/**` | the user, in a browser | Firebase ID token |
-| Sandbox `/s/{key}/**` | the user's own application | a project API key |
+| Surface | Caller | Credential | Status |
+| --- | --- | --- | --- |
+| Console `/api/v1/**` | the user, in a browser | Firebase ID token | ✅ implemented |
+| Sandbox `/s/{key}/**` | the user's own application | a project API key | ✅ implemented |
 
-INVARIANT: `/s/**` is excluded from Firebase authentication explicitly. Subjecting it to
-console auth would break every user's integration at once.
+INVARIANT: `/s/**` is excluded from Firebase authentication explicitly, as its own security
+filter chain. Subjecting it to console auth would break every user's integration at once —
+their applications hold an API key and no Firebase token.
+
+INVARIANT: **authentication answers "who is this"; authorization answers "may they".** The
+token converter resolves the account and reports whether it is active; it does **not**
+reject. Rejecting inside the converter throws from the security filter chain, where the
+exception handler cannot reach it — a suspended account would then leave as an unhandled
+500 instead of a clean 403.
+
+INVARIANT: **deny by default.** Every route is authenticated except two, each listed in
+`SecurityConfig` with its reason. A controller written tomorrow is protected the moment it
+exists, rather than when someone remembers to add it to a list.
 
 ### Firebase owns identity
 
 The backend **verifies** ID tokens and never issues them. No password hashing, no session
 store, no refresh-token rotation, no reuse detection — a large amount of security-critical
 code we deliberately do not own.
+
+⚠️ **The audience check is load-bearing.** Firebase's signing keys are shared across every
+Firebase project, so a token minted for *any other* project carries a valid signature.
+Without validating `aud` against our project id, anyone with a Firebase account anywhere
+could authenticate here. `SecurityConfig.audienceValidator` is what prevents that.
 
 ### Project API keys
 
@@ -126,7 +142,10 @@ INVARIANT: no secret value in the repo. Config references env vars and the app *
 start** when a required one is missing — never a silent default.
 
 Inventory (names only): `DROVI_DB_URL`, `DROVI_DB_USERNAME`, `DROVI_DB_PASSWORD`,
-`DROVI_ANTHROPIC_API_KEY`, `DROVI_FIREBASE_PROJECT_ID`, `DROVI_FIREBASE_CREDENTIALS_B64`.
+`DROVI_GEMINI_API_KEY`, `DROVI_FIREBASE_PROJECT_ID`.
+
+`DROVI_FIREBASE_PROJECT_ID` is **not a secret** — verifying a Firebase ID token needs no
+service-account credential (ADR-0006), so there is no Firebase credential to protect.
 
 ## 9. Threats mitigated by design
 

@@ -49,6 +49,7 @@ public class SandboxRuntime {
     private final RuleEngine ruleEngine;
     private final TemplateRenderer renderer;
     private final QuotaService quotas;
+    private final RecordWriter recordWriter;
     private final SandboxAuthenticator authenticator;
     private final AppConfigService config;
     private final ObjectMapper mapper;
@@ -171,26 +172,18 @@ public class SandboxRuntime {
 
     private MockResponse create(SandboxProject project, ApiEndpoint endpoint,
                                 SandboxCollection collection, MockRequest request) {
-        Map<String, Object> body = request.body() == null ? Map.of() : request.body();
-        Map<String, Object> data = new LinkedHashMap<>(body);
-
-        String key = Optional.ofNullable(data.get(collection.getKeyField()))
-                .map(String::valueOf)
-                .filter(v -> !v.isBlank())
-                .orElseGet(() -> generateKey(collection));
-        data.put(collection.getKeyField(), key);
-
-        quotas.requireCapacityFor(project.getId(), 1, estimateBytes(data));
-
-        if (records.findByCollectionIdAndRecordKey(collection.getId(), key).isPresent()) {
-            return MockResponse.error(409, "ALREADY_EXISTS",
-                    "A %s with id %s already exists.".formatted(collection.getCode(), key), endpoint.getId());
+        Map<String, Object> data;
+        try {
+            // Shared with the console's write path so quota accounting and key extraction
+            // cannot diverge between the two ways a record can be created.
+            data = recordWriter.write(project.getId(), collection, request.body()).getData();
+        } catch (RecordWriter.DuplicateRecordException e) {
+            return MockResponse.error(409, "ALREADY_EXISTS", e.getMessage(), endpoint.getId());
         }
-        records.save(SandboxRecord.create(project.getId(), collection.getId(), key, data));
 
         return MockResponse.of(endpoint.getSuccessStatus() == 200 ? 201 : endpoint.getSuccessStatus(),
                 renderer.render(endpoint.getResponseTemplate(),
-                        Map.of("record", data, "recordKey", key), data),
+                        Map.of("record", data, "recordKey", data.get(collection.getKeyField())), data),
                 endpoint.getId());
     }
 
@@ -214,7 +207,7 @@ public class SandboxRuntime {
         }
         merged.put(collection.getKeyField(), key);
 
-        long delta = Math.max(0, estimateBytes(merged) - estimateBytes(existing.get().getData()));
+        long delta = Math.max(0, recordWriter.sizeOf(merged) - recordWriter.sizeOf(existing.get().getData()));
         if (delta > 0) {
             quotas.requireCapacityFor(project.getId(), 0, delta);
         }
