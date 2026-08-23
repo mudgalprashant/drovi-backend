@@ -71,10 +71,10 @@ class ConsoleApiTest extends PostgresTestBase {
                 .andReturn().getResponse().getContentAsString();
 
         JsonNode json = mapper.readTree(body);
-        assertThat(json.get("projectKey").asString()).isNotBlank();
+        assertThat(json.get("id").asString()).isNotBlank();
         assertThat(json.get("baseUrl").asString())
-                .as("the base URL is the artifact — it must end with /s/<projectKey>")
-                .endsWith("/s/" + json.get("projectKey").asString());
+                .as("the base URL is the artifact — it must end with /s/<projectId>")
+                .endsWith("/s/" + json.get("id").asString());
     }
 
     /**
@@ -152,7 +152,7 @@ class ConsoleApiTest extends PostgresTestBase {
         String owner = user();
         String first = createProject(owner, "One");
         createProject(owner, "Two");
-        String key = projectKeyOf(owner, first);
+        String key = sandboxAddressOf(owner, first);
 
         mvc.perform(delete("/api/v1/projects/" + first).header("Authorization", "Bearer " + owner))
                 .andExpect(status().isNoContent());
@@ -174,7 +174,7 @@ class ConsoleApiTest extends PostgresTestBase {
     void anIssuedKey_opensTheSandbox_andIsNeverShownAgain() throws Exception {
         String owner = user();
         String projectId = createProject(owner, "Cards");
-        String projectKey = projectKeyOf(owner, projectId);
+        String projectKey = sandboxAddressOf(owner, projectId);
 
         String issued = mvc.perform(post("/api/v1/projects/" + projectId + "/keys")
                         .header("Authorization", "Bearer " + owner)
@@ -208,7 +208,7 @@ class ConsoleApiTest extends PostgresTestBase {
     void revokingAKey_closesTheSandboxToIt() throws Exception {
         String owner = user();
         String projectId = createProject(owner, "Cards");
-        String projectKey = projectKeyOf(owner, projectId);
+        String projectKey = sandboxAddressOf(owner, projectId);
 
         String issued = mvc.perform(post("/api/v1/projects/" + projectId + "/keys")
                         .header("Authorization", "Bearer " + owner))
@@ -241,7 +241,7 @@ class ConsoleApiTest extends PostgresTestBase {
     void dataSeededThroughTheConsole_isServedByTheSandbox() throws Exception {
         String owner = user();
         String projectId = createProject(owner, "Cards");
-        String projectKey = projectKeyOf(owner, projectId);
+        String projectKey = sandboxAddressOf(owner, projectId);
         openSandbox(projectId);
 
         String collectionId = createCollection(owner, projectId, "cards");
@@ -376,10 +376,9 @@ class ConsoleApiTest extends PostgresTestBase {
         return mapper.readTree(body).get("id").asString();
     }
 
-    private String projectKeyOf(String uid, String projectId) throws Exception {
-        String body = mvc.perform(get("/api/v1/projects/" + projectId)
-                .header("Authorization", "Bearer " + uid)).andReturn().getResponse().getContentAsString();
-        return mapper.readTree(body).get("projectKey").asString();
+    /** The sandbox address is the project's own id — there is no separate key any more. */
+    private String sandboxAddressOf(String uid, String projectId) {
+        return projectId;
     }
 
     private String createCollection(String uid, String projectId, String code) throws Exception {

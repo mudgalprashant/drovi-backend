@@ -2,7 +2,6 @@ package com.pm.drovi_backend.project;
 
 import com.pm.drovi_backend.common.DroviException;
 import com.pm.drovi_backend.common.ErrorCode;
-import com.pm.drovi_backend.common.Secrets;
 import com.pm.drovi_backend.domain.SandboxProject;
 import com.pm.drovi_backend.identity.AccountService;
 import com.pm.drovi_backend.identity.EntitlementService;
@@ -29,10 +28,6 @@ import java.util.UUID;
 @Slf4j
 public class ProjectService {
 
-    /** 24 bytes ≈ 192 bits. With auth_mode NONE this is the only guard on a sandbox. */
-    private static final int PROJECT_KEY_BYTES = 24;
-    private static final int MAX_KEY_ATTEMPTS = 5;
-
     private final SandboxProjectRepository projects;
     private final AccountService accounts;
     private final EntitlementService entitlements;
@@ -54,7 +49,7 @@ public class ProjectService {
         }
 
         SandboxProject project = SandboxProject.create(
-                accountId, uniqueProjectKey(), name, sourceProduct, sourceDocsUrl,
+                accountId, name, sourceProduct, sourceDocsUrl,
                 authMode == null ? SandboxProject.AuthMode.BEARER : authMode);
         SandboxProject saved = projects.save(project);
         log.info("project.created projectId={} accountId={}", saved.getId(), accountId);
@@ -117,18 +112,4 @@ public class ProjectService {
         log.info("project.archived projectId={}", projectId);
     }
 
-    /**
-     * Retries on collision rather than trusting randomness blindly. At 192 bits a collision
-     * is not going to happen — but a unique-constraint violation surfacing as a 500 to the
-     * user who happened to hit it would be a poor way to find that out.
-     */
-    private String uniqueProjectKey() {
-        for (int attempt = 0; attempt < MAX_KEY_ATTEMPTS; attempt++) {
-            String candidate = Secrets.randomToken(PROJECT_KEY_BYTES);
-            if (!projects.existsByProjectKey(candidate)) {
-                return candidate;
-            }
-        }
-        throw new DroviException(ErrorCode.INTERNAL, "Could not allocate a project key.");
-    }
 }

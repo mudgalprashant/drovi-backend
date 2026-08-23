@@ -17,12 +17,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.util.UUID;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
- * The public face of every sandbox: {@code /s/{projectKey}/**}.
+ * The public face of every sandbox: {@code /s/{projectId}/**}.
  *
  * <p>A catch-all rather than generated routes, because the whole promise is that the
  * caller's existing client hits paths Drovi never compiled in. This class parses,
@@ -39,16 +40,28 @@ public class MockController {
     private final AppConfigService config;
     private final ObjectMapper mapper;
 
-    @RequestMapping("/s/{projectKey}/**")
-    ResponseEntity<Object> handle(@PathVariable String projectKey, HttpServletRequest servletRequest)
+    @RequestMapping("/s/{projectId}/**")
+    ResponseEntity<Object> handle(@PathVariable String projectId, HttpServletRequest servletRequest)
             throws IOException {
 
         long startedAt = System.nanoTime();
-        MockRequest request = adapt(projectKey, servletRequest);
+        MockRequest request = adapt(projectId, servletRequest);
+
+        // Taken as a String and parsed here rather than bound as a UUID. A malformed id is a
+        // caller typing the base URL wrong, and it must answer in the SANDBOX's shape like any
+        // other miss — binding it would produce Spring's own 400 instead, which is a body the
+        // imitated product never sends.
+        UUID id = parseId(projectId);
+        if (id == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(MockResponse.error(HttpStatus.NOT_FOUND.value(), "SANDBOX_NOT_FOUND",
+                            "No sandbox is serving at this URL.", null).body());
+        }
 
         MockResponse response;
         try {
-            response = runtime.handle(projectKey, request);
+            response = runtime.handle(id, request);
         } catch (QuotaService.QuotaExceededException e) {
             // 507 rather than 400: nothing is wrong with the request. The project is full,
             // and the caller needs to know it is a storage limit, not their payload.
@@ -59,7 +72,7 @@ public class MockController {
 
         applyDelay(response.delayMs());
         int latencyMs = (int) ((System.nanoTime() - startedAt) / 1_000_000);
-        requestLogger.record(projectKey, request, response, latencyMs, clientPrefix(servletRequest));
+        requestLogger.record(id, request, response, latencyMs, clientPrefix(servletRequest));
 
         ResponseEntity.BodyBuilder builder = ResponseEntity.status(response.status())
                 .contentType(MediaType.APPLICATION_JSON);
@@ -67,7 +80,20 @@ public class MockController {
         return response.body() == null ? builder.build() : builder.body(response.body());
     }
 
-    private MockRequest adapt(String projectKey, HttpServletRequest servletRequest) throws IOException {
+    /**
+     * A bad id is indistinguishable from a project that does not exist — which is the same rule
+     * the runtime follows for a real id belonging to somebody else, and for the same reason: a
+     * different answer would confirm which sandboxes are out there.
+     */
+    private static UUID parseId(String candidate) {
+        try {
+            return UUID.fromString(candidate);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private MockRequest adapt(String projectId, HttpServletRequest servletRequest) throws IOException {
         Map<String, String> headers = new HashMap<>();
         for (String name : Collections.list(servletRequest.getHeaderNames())) {
             headers.put(name.toLowerCase(), servletRequest.getHeader(name));
@@ -89,27 +115,27 @@ public class MockController {
                     // A malformed body is the caller's business: the runtime sees no body
                     // and the matching rules decide. Failing here would hide which
                     // endpoint they were aiming at.
-                    log.debug("runtime.body.unparseable projectKey={}", projectKey);
+                    log.debug("runtime.body.unparseable projectId={}", projectId);
                 }
             }
         }
 
         return new MockRequest(servletRequest.getMethod().toUpperCase(Locale.ROOT),
-                remainingPath(projectKey, servletRequest),
+                remainingPath(projectId, servletRequest),
                 parseQuery(servletRequest.getQueryString()),
                 headers,
                 body);
     }
 
     /**
-     * Everything after {@code /s/{projectKey}}, decoded one segment at a time.
+     * Everything after {@code /s/{projectId}}, decoded one segment at a time.
      *
      * <p>Per segment, not whole-string, because a record id containing an encoded slash
      * ({@code %2F}) must stay inside its own segment instead of splitting the path.
      */
-    private static String remainingPath(String projectKey, HttpServletRequest servletRequest) {
+    private static String remainingPath(String projectId, HttpServletRequest servletRequest) {
         String uri = servletRequest.getRequestURI();
-        String prefix = servletRequest.getContextPath() + "/s/" + projectKey;
+        String prefix = servletRequest.getContextPath() + "/s/" + projectId;
         String remainder = uri.startsWith(prefix) ? uri.substring(prefix.length()) : uri;
         if (remainder.isEmpty()) {
             return "/";

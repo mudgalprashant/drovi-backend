@@ -222,7 +222,7 @@ class GenerationPipelineTest extends PostgresTestBase {
         assertThat(projectStatus(project)).isEqualTo("READY");
         assertThat(provider.calls).as("research, spec, and one seed per collection").hasValue(4);
 
-        String key = projectKey(project);
+        String key = sandboxAddress(project);
         mvc.perform(get("/s/" + key + "/v1/cards"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
@@ -424,11 +424,9 @@ class GenerationPipelineTest extends PostgresTestBase {
                 .andExpect(status().isAccepted());
     }
 
-    private String projectKey(String project) throws Exception {
-        String body = mvc.perform(get("/api/v1/projects/" + project)
-                        .header("Authorization", "Bearer " + user))
-                .andReturn().getResponse().getContentAsString();
-        return mapper.readTree(body).get("projectKey").asString();
+    /** The sandbox address is the project's own id. */
+    private String sandboxAddress(String project) {
+        return project;
     }
 
     private String projectStatus(String project) {

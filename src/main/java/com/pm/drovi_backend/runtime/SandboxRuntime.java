@@ -55,8 +55,8 @@ public class SandboxRuntime {
     private final ObjectMapper mapper;
 
     @Transactional
-    public MockResponse handle(String projectKey, MockRequest request) {
-        Optional<SandboxProject> found = projects.findByProjectKey(projectKey);
+    public MockResponse handle(UUID projectId, MockRequest request) {
+        Optional<SandboxProject> found = projects.findById(projectId);
         if (found.isEmpty() || !found.get().isServing()) {
             // Identical response for "no such project" and "not ready", deliberately: the
             // project key is a secret, and distinguishing the two confirms which keys exist.
@@ -72,8 +72,8 @@ public class SandboxRuntime {
                 routeMatcher.match(project.getId(), request.method(), request.path());
         if (route.isEmpty()) {
             int status = config.getInt("runtime.unmatched.status", 404);
-            log.info("runtime.unmatched projectKey={} method={} path={}",
-                    projectKey, request.method(), request.path());
+            log.info("runtime.unmatched projectId={} method={} path={}",
+                    projectId, request.method(), request.path());
             return MockResponse.error(status, "NOT_FOUND",
                     "No endpoint matches %s %s.".formatted(request.method(), request.path()), null);
         }

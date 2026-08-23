@@ -226,11 +226,11 @@ class SchemaInvariantsTest extends PostgresTestBase {
                 """, UUID.class, "uid-" + UUID.randomUUID());
     }
 
-    private UUID newProject(String keySuffix) {
+    private UUID newProject(String label) {
         return jdbc.queryForObject("""
-                INSERT INTO sandbox_project (account_id, project_key, name, source_product)
-                VALUES (?, ?, 'Test sandbox', 'Test product') RETURNING id
-                """, UUID.class, newAccount(), keySuffix + "-" + UUID.randomUUID());
+                INSERT INTO sandbox_project (account_id, name, source_product)
+                VALUES (?, ?, 'Test product') RETURNING id
+                """, UUID.class, newAccount(), label);
     }
 
     private UUID newCollection(UUID projectId, String code) {

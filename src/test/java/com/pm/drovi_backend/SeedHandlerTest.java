@@ -166,7 +166,7 @@ class SeedHandlerTest extends PostgresTestBase {
         runner.claimAndRunOne();
 
         assertThat(statusOf(job)).isEqualTo("SUCCEEDED");
-        mvc.perform(get("/s/" + projectKey() + "/v1/cards"))
+        mvc.perform(get("/s/" + sandboxAddress() + "/v1/cards"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(3))
                 .andExpect(jsonPath("$[*].id").value(
@@ -343,9 +343,9 @@ class SeedHandlerTest extends PostgresTestBase {
 
     private UUID newProject(UUID accountId) {
         return jdbc.queryForObject("""
-                INSERT INTO sandbox_project (account_id, project_key, name, source_product, status, auth_mode)
-                VALUES (?, ?, 'Generated', 'Stripe', 'READY', 'NONE') RETURNING id
-                """, UUID.class, accountId, "seed-" + UUID.randomUUID());
+                INSERT INTO sandbox_project (account_id, name, source_product, status, auth_mode)
+                VALUES (?, 'Generated', 'Stripe', 'READY', 'NONE') RETURNING id
+                """, UUID.class, accountId);
     }
 
     private UUID newCollection(UUID projectId) {
@@ -368,9 +368,9 @@ class SeedHandlerTest extends PostgresTestBase {
                 """, projectId, group, dataCollectionId);
     }
 
-    private String projectKey() {
-        return jdbc.queryForObject("SELECT project_key FROM sandbox_project WHERE id = ?",
-                String.class, project);
+    /** The sandbox address is the project's own id. */
+    private String sandboxAddress() {
+        return project.toString();
     }
 
     private void setConfig(String key, String value) {

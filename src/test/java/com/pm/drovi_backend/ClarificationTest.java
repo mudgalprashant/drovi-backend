@@ -373,7 +373,7 @@ class ClarificationTest extends PostgresTestBase {
         }
 
         assertThat(projectStatus()).isEqualTo("READY");
-        mvc.perform(get("/s/" + projectKey() + "/v1/cards"))
+        mvc.perform(get("/s/" + sandboxAddress() + "/v1/cards"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
     }
@@ -467,9 +467,9 @@ class ClarificationTest extends PostgresTestBase {
                 String.class, project);
     }
 
-    private String projectKey() {
-        return jdbc.queryForObject("SELECT project_key FROM sandbox_project WHERE id = ?::uuid",
-                String.class, project);
+    /** The sandbox address is the project's own id. */
+    private String sandboxAddress() {
+        return project;
     }
 
     private String createProject() throws Exception {

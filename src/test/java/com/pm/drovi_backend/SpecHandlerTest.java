@@ -180,7 +180,7 @@ class SpecHandlerTest extends PostgresTestBase {
 
         // The route answers, with the envelope the spec asked for and no records yet.
         jdbc.update("UPDATE sandbox_project SET auth_mode = 'NONE' WHERE id = ?", project);
-        mvc.perform(get("/s/" + projectKey() + "/v1/cards"))
+        mvc.perform(get("/s/" + sandboxAddress() + "/v1/cards"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.object").value("list"))
                 .andExpect(jsonPath("$.data").isArray());
@@ -464,14 +464,14 @@ class SpecHandlerTest extends PostgresTestBase {
      */
     private UUID newProject(UUID accountId) {
         return jdbc.queryForObject("""
-                INSERT INTO sandbox_project (account_id, project_key, name, source_product, status)
-                VALUES (?, ?, 'Generated', 'Stripe', 'READY') RETURNING id
-                """, UUID.class, accountId, "spec-" + UUID.randomUUID());
+                INSERT INTO sandbox_project (account_id, name, source_product, status)
+                VALUES (?, 'Generated', 'Stripe', 'READY') RETURNING id
+                """, UUID.class, accountId);
     }
 
-    private String projectKey() {
-        return jdbc.queryForObject("SELECT project_key FROM sandbox_project WHERE id = ?",
-                String.class, project);
+    /** The sandbox address is the project's own id. */
+    private String sandboxAddress() {
+        return project.toString();
     }
 
     private void setPlanEndpointLimit(int limit) {
