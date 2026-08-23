@@ -219,11 +219,34 @@ nothing reclaims it, so `ai.job.timeout.seconds` remains decorative. That is Pha
 
 ### 3.3 The pipeline
 
-| Purpose | Produces | Notes |
+| Purpose | Produces | State |
 | --- | --- | --- |
-| RESEARCH | a description of the real product's API surface | grounding is open decision M — supplied docs vs. web search |
-| SPEC | `api_collection`, `api_endpoint`, schemas, envelopes | must set `path_template` **verbatim** |
-| SEED | `sandbox_collection`, `sandbox_record` | quota-checked; **synthetic data only** |
+| RESEARCH | a description of the real product's API surface | ✅ **done** |
+| SPEC | `api_collection`, `api_endpoint`, schemas, envelopes | ❌ must set `path_template` **verbatim** |
+| SEED | `sandbox_collection`, `sandbox_record` | ❌ quota-checked; **synthetic data only** |
+
+#### RESEARCH ✅
+
+Decision M is resolved — **ADR-0010**: documentation is recommended, never required, and
+nothing is ever fetched.
+
+| Input | Behaviour |
+| --- | --- |
+| docs supplied | primary source; outranks the model's recollection |
+| no docs, `agentResearchOnly` set | runs from the model's own knowledge |
+| neither | **fails terminally**, asking for one or the other |
+| `docsUrl` | provenance, shown back to the user. Never fetched |
+
+The opt-in is the point: missing docs and *declined* docs are different requests, and a
+silent fallback would make the recommendation decorative. Findings carry a `confidence` and
+`uncertainties` so a user can see what they traded away.
+
+Supplied docs are truncated to `ai.research.max.docs.chars` before they are billed, and reach
+the model in the user turn — never the system instruction. RESEARCH holds no tools and writes
+to no project table.
+
+Job parameters live in the new `generation_job.input` jsonb column. Every kind needs different
+ones, and encoding them into `prompt` would put a parser between a user's words and the work.
 
 Structured outputs, not free-text parsing. Validate before writing: a malformed spec must
 fail the job, never half-populate a project.

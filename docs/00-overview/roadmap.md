@@ -119,8 +119,8 @@ batch, and it must check quota *before* the insert, not after.
 | --- | --- |
 | Provider adapter | ✅ `geminiProvider`, resolved by bean name from `ai_provider_config` |
 | Ledger and caps | ✅ every call recorded; kill switch and daily caps enforced **before** the call. ADR-0009 |
-| Job runner | ✅ claim, retry, and the three failure classes. No handlers yet, so it claims nothing |
-| Pipeline | ❌ RESEARCH → SPEC → SEED — the handlers the runner is waiting for |
+| Job runner | ✅ claim, retry, and the three failure classes |
+| Pipeline | 🟡 RESEARCH ✅ · SPEC ❌ · SEED ❌ |
 | Chat | ❌ threads, messages, and a tool surface that can only touch the project in scope |
 | REVISE | ❌ "make five customers' cards blocked" applied to an existing sandbox |
 
@@ -130,9 +130,14 @@ exactly as a real one does. The runner that will drive it is built and its state
 tested, but it has no handlers, so nothing runs and nothing user-facing can reach it yet.
 That is the intended order.
 
-**3.3 is blocked on a decision**, not on code: open decision **M** — may the researcher use
-web search, or must it be given docs? It changes the accuracy, the cost and the legal posture
-of every generation, so it is not an agent's to settle.
+**Decision M is settled** (ADR-0010): documentation is recommended, never required, and
+nothing is ever fetched. A user either supplies docs or explicitly opts into having the agent
+work from its own knowledge — and because accuracy is now something they can trade away,
+research reports how confident it is and what to check.
+
+What remains in 3.3 is SPEC and SEED: turning findings into routes and records. That is where
+generation starts *writing to a project*, and where "a malformed spec must fail the job, never
+half-populate a project" starts to bite.
 
 **Exit criteria:** from one sentence — *"mimic Stripe's card API"* — a project reaches
 `READY` with endpoints, schemas and seed data, and its base URL serves them.
