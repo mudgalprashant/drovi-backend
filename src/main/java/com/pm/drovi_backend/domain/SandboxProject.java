@@ -69,6 +69,51 @@ public class SandboxProject {
     protected SandboxProject() {
     }
 
+    /**
+     * A project created through the console is {@link Status#READY} immediately: it has no
+     * endpoints yet, so it answers 404 to everything, which is honest. Generation creates
+     * DRAFT projects instead and promotes them when a spec lands.
+     */
+    public static SandboxProject create(UUID accountId, String projectKey, String name,
+                                        String sourceProduct, String sourceDocsUrl, AuthMode authMode) {
+        SandboxProject project = new SandboxProject();
+        project.accountId = accountId;
+        project.projectKey = projectKey;
+        project.name = name;
+        project.sourceProduct = sourceProduct;
+        project.sourceDocsUrl = sourceDocsUrl;
+        project.authMode = authMode;
+        project.status = Status.READY;
+        return project;
+    }
+
+    /** Null fields are left alone, so PATCH is sparse rather than a full replace. */
+    public void update(String name, SandboxProject.AuthMode authMode,
+                       String authHeaderName, Integer latencyMs) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (authMode != null) {
+            this.authMode = authMode;
+        }
+        if (authHeaderName != null) {
+            this.authHeaderName = authHeaderName;
+        }
+        if (latencyMs != null) {
+            this.latencyMs = latencyMs;
+        }
+    }
+
+    /**
+     * Soft, deliberately. The sandbox stops serving immediately, but the project's records
+     * and request log survive — an archive that destroyed data would make "archive" a word
+     * nobody dares click.
+     */
+    public void archive(Instant when) {
+        this.archivedAt = when;
+        this.status = Status.ARCHIVED;
+    }
+
     public boolean isServing() {
         return status == Status.READY && archivedAt == null;
     }

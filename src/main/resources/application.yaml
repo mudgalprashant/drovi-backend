@@ -83,6 +83,11 @@ spring:
 #   firebase:
 #     project-id: set-via-DROVI_FIREBASE_PROJECT_ID
 
+drovi:
+  # Origin only, no path. This is what a project's base URL is built from, so a wrong
+  # value here ends up pasted into every user's codebase. Not a secret.
+  public-base-url: ${DROVI_PUBLIC_BASE_URL:http://localhost:8080}
+
 server:
   port: ${DROVI_PORT:8080}
   shutdown: graceful

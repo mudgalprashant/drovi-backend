@@ -1,5 +1,6 @@
 package com.pm.drovi_backend.common;
 
+import com.pm.drovi_backend.runtime.QuotaService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +36,23 @@ public class GlobalExceptionHandler {
         // attach a stack trace, or real problems drown in them.
         log.info("api.error code={} path={}", e.getErrorCode().code(), request.getRequestURI());
         return render(e.getErrorCode(), e.getMessage(), request);
+    }
+
+    /**
+     * Quota is a runtime concern raised deep in the write path, not a {@link DroviException}
+     * — so without this it fell through to the 500 handler and a user who was simply full
+     * was told the server had broken. 507 rather than 400: nothing is wrong with the
+     * request.
+     */
+    @ExceptionHandler(QuotaService.QuotaExceededException.class)
+    ResponseEntity<Object> handleQuota(QuotaService.QuotaExceededException e, HttpServletRequest request) {
+        QuotaService.Usage usage = e.usage();
+        log.info("api.quota.exceeded path={} records={}/{} bytes={}/{}", request.getRequestURI(),
+                usage.records(), usage.maxRecords(), usage.bytes(), usage.maxBytes());
+        return render(ErrorCode.QUOTA_EXCEEDED,
+                "This project has reached its plan's storage limit (%d/%d records, %d/%d bytes)."
+                        .formatted(usage.records(), usage.maxRecords(), usage.bytes(), usage.maxBytes()),
+                request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

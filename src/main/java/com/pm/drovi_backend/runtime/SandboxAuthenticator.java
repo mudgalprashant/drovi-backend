@@ -1,5 +1,6 @@
 package com.pm.drovi_backend.runtime;
 
+import com.pm.drovi_backend.common.Secrets;
 import com.pm.drovi_backend.domain.SandboxProject;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -7,10 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
-import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -87,12 +85,8 @@ public class SandboxAuthenticator {
         }
     }
 
+    /** Delegates so issuing and verifying can never drift apart. */
     static String sha256(String raw) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(raw.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is required by the platform", e);
-        }
+        return Secrets.sha256Hex(raw);
     }
 }

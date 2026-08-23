@@ -85,21 +85,21 @@ id**, not a service-account credential. Until one is set the server fails closed
 
 ---
 
-## Phase 2 — Console API
+## Phase 2 — Console API  🟡 in progress
 
 **Goal:** everything the runtime can do becomes reachable without touching SQL.
 
 This is the phase that makes Phase 0 useful. It is also the last one that is purely
 mechanical — after this, cost and correctness get interesting.
 
-| Deliverable | Detail |
+| Deliverable | State |
 | --- | --- |
-| Projects | create, list, archive. The base URL is the artifact |
-| API keys | issue and revoke; the raw key is returned **once** and never stored |
-| Spec browsing | API groups, endpoints, schemas — the Postman-like view |
-| Data | browse, edit, bulk-seed records, within quota |
-| Rules | create, reorder, enable/disable, one-shot |
-| Inspector | a tail of `mock_request_log` per project |
+| Projects | ✅ create, list, update, archive. The base URL is the artifact |
+| API keys | ✅ issue and revoke; the raw key is returned **once** and never stored |
+| Data | ✅ collections and records, incl. bulk seed, within quota |
+| Spec browsing | ❌ API groups, endpoints, schemas — the Postman-like view |
+| Rules | ❌ create, reorder, enable/disable, one-shot |
+| Inspector | ❌ a tail of `mock_request_log` per project |
 
 **Exit criteria:** a user creates a project, seeds data, defines a rule, calls their
 sandbox, and sees the call in the inspector — entirely over HTTP.
