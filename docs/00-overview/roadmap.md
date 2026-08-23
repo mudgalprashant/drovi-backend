@@ -59,26 +59,29 @@ rules overriding data and quota refusing writes past the plan limit.
 
 ---
 
-## Phase 1 — Identity and entitlements
+## Phase 1 — Identity and entitlements  🟡 mostly complete
 
 **Goal:** a caller has a name, a plan, and limits that are the server's to decide.
 
 Nothing else can be built first. Every console route needs a principal, and every quota
 needs an account to charge.
 
-| Deliverable | Detail |
+| Deliverable | Status |
 | --- | --- |
-| Firebase token verification | a filter; the backend verifies ID tokens and never issues them |
-| Implicit account provisioning | an `accounts` row appears on first authenticated call |
-| `GET /me`, `GET /me/entitlements` | plan limits, server-authoritative |
-| Usage rollups | `account_usage_month` maintained on write |
-| Error envelope | one `@RestControllerAdvice`; 5xx never leaks internals |
+| Firebase token verification | ✅ OAuth2 resource server against Firebase's JWK set (ADR-0006) |
+| Deny by default | ✅ every route authenticated except `/s/**` and health, each with a stated reason |
+| Implicit account provisioning | ✅ on first authenticated call, race-safe |
+| `GET /me`, `GET /me/entitlements` | ✅ limits read from `plan_catalog` |
+| Error envelope + correlation ids | ✅ one handler; 5xx carries a generic message and an id |
+| Usage rollups (`account_usage_month`) | ❌ deferred to Phase 6, where the monthly caps are actually enforced |
 
 **Exit criteria:** a real Firebase user signs in, hits `/me`, sees their plan, and an
-unauthenticated call to any console route is rejected.
+unauthenticated call to any console route is rejected. **The first half needs a Firebase
+project to exist** — everything else is done and tested.
 
-**Risk:** the Firebase project does not exist yet — a human task that blocks the whole
-phase. Start it before the phase, not during.
+**The human task shrank.** ADR-0006 means verification needs only the Firebase **project
+id**, not a service-account credential. Until one is set the server fails closed:
+`AUTH_NOT_CONFIGURED` on every console route, sandboxes unaffected.
 
 ---
 

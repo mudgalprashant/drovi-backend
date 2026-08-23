@@ -32,6 +32,18 @@ dependencies {
 	implementation 'org.flywaydb:flyway-database-postgresql'
 	runtimeOnly 'org.postgresql:postgresql'
 
+	// --- Security -------------------------------------------------------
+	// Firebase owns identity: we VERIFY ID tokens and never issue them.
+	//
+	// Deliberately NOT firebase-admin. A Firebase ID token is a standard RS256
+	// JWT, and Google publishes the signing keys as a JWK set -- so the OAuth2
+	// resource server verifies it with code that is already battle-tested,
+	// instead of pulling in the Admin SDK's grpc/google-cloud dependency tree
+	// for a 512 MB instance. It also means we need only the project ID, not a
+	// service-account credential, to authenticate a caller.
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+
 	// --- Cache ----------------------------------------------------------
 	// Caffeine, not Redis. We run one instance; an in-JVM cache has no network
 	// hop, no serialisation and nothing extra to keep alive. See decision #13.
@@ -47,6 +59,7 @@ dependencies {
 
 	// --- Test -----------------------------------------------------------
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testImplementation 'org.springframework.security:spring-security-test'
 	// Runs a REAL Postgres binary, downloaded as a dependency. No Docker, no
 	// Homebrew, nothing for a developer to install — which is the point: a
 	// migration that only ever runs against H2 has not been tested.

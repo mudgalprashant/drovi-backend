@@ -21,20 +21,25 @@ compiles; it is done when a test proves the behaviour and `./gradlew build` is g
 
 ### 1.1 Token verification
 
+✅ **Done.** Implemented as an OAuth2 resource server against Firebase's JWK set rather
+than the Admin SDK — see ADR-0006. Verification needs only the project id.
+
 | Step | Detail |
 | --- | --- |
-| Add `firebase-admin` | pinned version; no floating ranges |
-| `FirebaseAuthFilter` | verifies the ID token, puts a `DroviPrincipal` in the security context |
-| Config | `DROVI_FIREBASE_PROJECT_ID`, `DROVI_FIREBASE_CREDENTIALS_B64` |
+| Decoder | `NimbusJwtDecoder` + issuer and **audience** validation (`SecurityConfig`) |
+| Config | `DROVI_FIREBASE_PROJECT_ID` only — no service-account credential |
 | Route rules | **deny by default.** `/s/**` and `/actuator/health` are the only anonymous paths, each with a stated reason |
+| Unconfigured | no project id → no decoder → `AUTH_NOT_CONFIGURED` on every console route |
 
 ⚠️ `/s/**` must be excluded explicitly. It has its own authentication (project API keys)
 and must never be subjected to Firebase auth — that would break every user's integration.
 
-**Test:** a valid token resolves a principal; an expired one, one from another project, and
-a missing one each 401. `/s/**` is unaffected.
+**Tested:** `IdentityTest` (8) and `AuthNotConfiguredTest` (3). Signature and audience
+validation is Spring Security's and is not re-tested; what is tested is everything after
+verification — provisioning, the race, entitlements, deny-by-default, suspension, and that
+`/s/**` is unaffected.
 
-### 1.2 Implicit account provisioning
+### 1.2 Implicit account provisioning ✅
 
 An `accounts` row is created on first authenticated call — no signup endpoint.
 
@@ -42,19 +47,24 @@ Race: two concurrent first calls. Insert and catch the unique violation on
 `accounts_firebase_uid_uk`; treat the violation as success. Do **not** convert this to
 SELECT-then-INSERT — that reintroduces the race the index closes.
 
-### 1.3 `/me` and entitlements
+### 1.3 `/me` and entitlements ✅
 
 `GET /me`, `GET /me/entitlements` reading `plan_catalog`. **Never** accept a limit from the
 client.
 
-### 1.4 Error envelope
+### 1.4 Error envelope ✅
 
 One `@RestControllerAdvice`, stable codes, correlation id in every response. 5xx bodies
 carry a generic message and the correlation id — never a stack trace or an upstream
 message.
 
 **Phase exit:** sign in with a real Firebase user, `GET /me` returns the account and plan,
-every other console route 401s without a token.
+every other console route 401s without a token. ⏳ **Waiting only on a Firebase project id**
+— set `DROVI_FIREBASE_PROJECT_ID` and this is live.
+
+One thing deliberately deferred: `account_usage_month` rollups. They belong with the
+monthly caps in Phase 6, and writing the counters before anything reads them would be
+machinery nobody exercises.
 
 ---
 
