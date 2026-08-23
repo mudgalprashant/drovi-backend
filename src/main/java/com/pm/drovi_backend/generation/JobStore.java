@@ -185,6 +185,21 @@ public class JobStore {
                 """, errorCode, errorMessage, jobId);
     }
 
+    /**
+     * A finished job's result, for the step that consumes it.
+     *
+     * <p>Restricted to {@code SUCCEEDED} on purpose: the column is also written on the way to
+     * a retry, and building a spec on the output of a job that then failed would be building
+     * on something nobody accepted.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Map<String, Object>> findResult(UUID jobId) {
+        return Optional.ofNullable(jdbc.query(
+                "SELECT result::text FROM generation_job WHERE id = ? AND status = 'SUCCEEDED'",
+                rs -> rs.next() ? rs.getString(1) : null, jobId))
+                .map(this::readInput);
+    }
+
     @Transactional(readOnly = true)
     public Optional<GenerationJob> find(UUID jobId) {
         return jdbc.query("""
