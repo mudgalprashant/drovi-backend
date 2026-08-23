@@ -5,6 +5,9 @@ import com.pm.drovi_backend.generation.JobChain;
 import com.pm.drovi_backend.generation.JobKind;
 import com.pm.drovi_backend.generation.JobStore;
 import com.pm.drovi_backend.generation.NewJob;
+import com.pm.drovi_backend.generation.clarify.ClarificationResumer;
+import com.pm.drovi_backend.generation.clarify.ClarificationStore;
+import com.pm.drovi_backend.generation.clarify.RaisedQuestion;
 import com.pm.drovi_backend.project.ProjectService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * What follows what: RESEARCH → SPEC → one SEED per collection → the project is READY.
@@ -37,19 +41,64 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class GenerationPipeline implements JobChain {
+public class GenerationPipeline implements JobChain, ClarificationResumer {
 
     private final JobStore jobs;
     private final ProjectService projects;
+    /**
+     * The store rather than {@code ClarificationService}, deliberately. The service depends on
+     * this class to resume a paused generation, so depending on the service here would be a
+     * constructor cycle. Raising a doubt and reading a settled one are store-level operations;
+     * answering one — which is what needs the resume — is not.
+     */
+    private final ClarificationStore clarifications;
 
+    /**
+     * A step's successors, unless it raised doubts — in which case the chain <strong>stops and
+     * waits for the user</strong>.
+     *
+     * <p>That pause is the point. A step that is unsure and carries on regardless produces a
+     * sandbox that looks right and is wrong, and the user finds out after building against it.
+     * The generation resumes from {@link #resume} the moment the last question is answered.
+     */
     @Override
     public List<NewJob> after(GenerationJob job, Map<String, Object> result) {
+        if (raiseAll(job, RaisedQuestion.from(result.get("questions"))) > 0) {
+            log.info("pipeline.waiting.for.user jobId={} projectId={}", job.id(), job.projectId());
+            return List.of();
+        }
+        return successorsOf(job, result);
+    }
+
+    /**
+     * Picks the generation back up where it paused.
+     *
+     * <p>It works out where that was by asking the database rather than by remembering: the most
+     * recent succeeded job for the project is, by definition, the one whose successors were
+     * never enqueued. Storing "what to do next" beside the questions would be a second source of
+     * truth that has to survive a retry and a failure.
+     */
+    @Override
+    public void resume(UUID accountId, UUID projectId) {
+        jobs.lastSucceededFor(projectId).ifPresentOrElse(
+                job -> {
+                    List<NewJob> next = successorsOf(job, jobs.findResult(job.id()).orElse(Map.of()));
+                    jobs.enqueueAll(job.id(), next);
+                    log.info("pipeline.resumed projectId={} after={} enqueued={}",
+                            projectId, job.kind(), next.size());
+                },
+                () -> log.warn("pipeline.resume.nothingToResume projectId={}", projectId));
+    }
+
+    private List<NewJob> successorsOf(GenerationJob job, Map<String, Object> result) {
         return switch (job.kind()) {
             case RESEARCH -> List.of(new NewJob(JobKind.SPEC,
                     "Turn the research into endpoints",
-                    // By reference, not by value: the findings stay in the row that produced
-                    // them rather than being copied into every job downstream of it.
-                    Map.of("researchJobId", job.id().toString())));
+                    // Findings by reference — they stay in the row that produced them rather
+                    // than being copied into every job downstream. Answers by value, because a
+                    // step that is not told what was already decided asks it again.
+                    Map.of("researchJobId", job.id().toString(),
+                            "clarifications", answersFor(job.projectId()))));
 
             case SPEC -> seedJobsFor(result);
 
@@ -93,6 +142,26 @@ public class GenerationPipeline implements JobChain {
                 "Generate example " + code,
                 Map.of("collectionId", String.valueOf(id)))));
         return seeds;
+    }
+
+    /** @return how many doubts are now open. Zero means the chain carries on. */
+    private int raiseAll(GenerationJob job, List<RaisedQuestion> questions) {
+        for (RaisedQuestion question : questions) {
+            clarifications.raise(job.accountId(), job.projectId(), job.id(), job.threadId(),
+                    question.question(), question.detail(), question.subject(),
+                    question.options(), question.allowsAssumption());
+        }
+        return questions.size();
+    }
+
+    /** What the user has already settled, in a form a prompt can carry. */
+    private List<Map<String, String>> answersFor(UUID projectId) {
+        if (projectId == null) {
+            return List.of();
+        }
+        return clarifications.resolvedFor(projectId).stream()
+                .map(doubt -> Map.of("question", doubt.question(), "answer", doubt.asResolvedInstruction()))
+                .toList();
     }
 
     private void finishIfLast(GenerationJob job) {

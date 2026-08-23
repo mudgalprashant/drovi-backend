@@ -2,7 +2,9 @@ package com.pm.drovi_backend.generation;
 
 import com.pm.drovi_backend.common.DroviException;
 import com.pm.drovi_backend.common.ErrorCode;
+import com.pm.drovi_backend.config.AppConfigService;
 import com.pm.drovi_backend.domain.SandboxProject;
+import com.pm.drovi_backend.generation.clarify.ClarificationService;
 import com.pm.drovi_backend.project.ApiSpecService;
 import com.pm.drovi_backend.project.ProjectService;
 import lombok.RequiredArgsConstructor;
@@ -30,15 +32,31 @@ import java.util.UUID;
 @Slf4j
 public class GenerationService {
 
+    /**
+     * How much longer there is to wait, and whether the wait is on us or on the user.
+     *
+     * @param waitingForYou when true there is no estimate, because the clock is not running —
+     *                      generation has stopped on a question only the user can answer.
+     *                      Counting down to nothing is worse than saying nothing
+     */
+    public record Progress(boolean waitingForYou, int openQuestions, int stepsRemaining,
+                           Integer estimatedSeconds) {
+    }
+
     /** One row of a project's generation history, as the console shows it. */
     public record JobView(UUID id, JobKind kind, JobStatus status, int attempt,
                           String errorCode, String errorMessage,
                           Instant createdAt, Instant finishedAt) {
     }
 
+    private static final int SECONDS_PER_STEP_DEFAULT = 45;
+    private static final int EXPECTED_COLLECTIONS_DEFAULT = 3;
+
     private final JobStore jobs;
     private final ProjectService projects;
     private final ApiSpecService spec;
+    private final ClarificationService clarifications;
+    private final AppConfigService config;
     private final JdbcTemplate jdbc;
 
     /**
@@ -103,6 +121,50 @@ public class GenerationService {
 
     private static Instant instantOf(OffsetDateTime value) {
         return value == null ? null : value.toInstant();
+    }
+
+    /**
+     * How much longer, in seconds.
+     *
+     * <p>Built from a configured per-step figure rather than measured timings, because there
+     * are no real timings yet and a made-up average presented as data is worse than an honest
+     * constant an operator can correct with one UPDATE.
+     *
+     * <p>Before the spec exists nobody knows how many collections there will be, so the seed
+     * steps are assumed. After it they are counted — the estimate gets more truthful as the
+     * generation proceeds, which is the right direction for it to move.
+     */
+    @Transactional(readOnly = true)
+    public Progress progress(UUID accountId, UUID projectId) {
+        projects.require(accountId, projectId);
+
+        int open = (int) clarifications.forProject(accountId, projectId).stream()
+                .filter(doubt -> doubt.isOpen())
+                .count();
+        if (open > 0) {
+            return new Progress(true, open, 0, null);
+        }
+
+        int outstanding = jdbc.queryForObject("""
+                SELECT count(*) FROM generation_job
+                 WHERE project_id = ? AND status IN ('QUEUED','RUNNING')
+                """, Integer.class, projectId);
+        if (outstanding == 0) {
+            return new Progress(false, 0, 0, 0);
+        }
+
+        boolean specDone = jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM generation_job
+                                WHERE project_id = ? AND kind = 'SPEC' AND status = 'SUCCEEDED')
+                """, Boolean.class, projectId);
+        // Before the spec, the seed jobs it will produce are not rows yet and have to be
+        // assumed. After it, everything left is already queued.
+        int stepsRemaining = specDone
+                ? outstanding
+                : outstanding + config.getInt("ai.generation.expected.collections", EXPECTED_COLLECTIONS_DEFAULT);
+
+        return new Progress(false, 0, stepsRemaining,
+                stepsRemaining * config.getInt("ai.job.estimated.seconds.per.step", SECONDS_PER_STEP_DEFAULT));
     }
 
     /** Newest first — a console shows the current attempt, and history below it. */

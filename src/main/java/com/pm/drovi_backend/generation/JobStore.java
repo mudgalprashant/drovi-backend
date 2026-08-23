@@ -166,6 +166,42 @@ public class JobStore {
     }
 
     /**
+     * The step a paused generation stopped after.
+     *
+     * <p>The most recent succeeded job is, by definition, the one whose successors were never
+     * enqueued — which is how a generation waiting on a question knows where to pick up again
+     * without storing "what to do next" as a second source of truth.
+     */
+    @Transactional(readOnly = true)
+    public Optional<GenerationJob> lastSucceededFor(UUID projectId) {
+        return jdbc.query("""
+                SELECT %s FROM generation_job
+                 WHERE project_id = ? AND status = 'SUCCEEDED'
+                 ORDER BY finished_at DESC
+                 LIMIT 1
+                """.formatted(COLUMNS),
+                rs -> rs.next() ? Optional.of(job.mapRow(rs, 1)) : Optional.<GenerationJob>empty(),
+                projectId);
+    }
+
+    /** Enqueue successors for a job that already succeeded, when a pause is being lifted. */
+    @Transactional
+    public void enqueueAll(UUID afterJobId, List<NewJob> next) {
+        for (NewJob successor : next) {
+            jdbc.update("""
+                    INSERT INTO generation_job (account_id, project_id, thread_id, kind, prompt, input)
+                    SELECT account_id, project_id, thread_id, ?, ?, ?::jsonb
+                      FROM generation_job WHERE id = ?
+                    """,
+                    successor.kind().name(), successor.prompt(),
+                    mapper.writeValueAsString(successor.input()), afterJobId);
+        }
+        if (!next.isEmpty()) {
+            log.info("job.enqueued.after jobId={} count={}", afterJobId, next.size());
+        }
+    }
+
+    /**
      * Whether anything is still outstanding for a project — which is how the last step of a
      * generation recognises itself. A SEED job cannot know it is the last one; it can only know
      * that nothing else is left.

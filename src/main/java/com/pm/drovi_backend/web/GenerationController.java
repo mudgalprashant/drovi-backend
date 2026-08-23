@@ -58,7 +58,11 @@ class GenerationController {
         }
     }
 
-    record StartedResponse(String jobId, String status, String message) {
+    record StartedResponse(String jobId, String status, Integer estimatedSeconds, String message) {
+    }
+
+    record ProgressResponse(boolean waitingForYou, int openQuestions, int stepsRemaining,
+                            Integer estimatedSeconds, String message) {
     }
 
     record JobResponse(String id, String kind, String status, int attempt,
@@ -73,10 +77,41 @@ class GenerationController {
                           @Valid @RequestBody StartRequest request) {
         GenerationJob job = generations.start(caller.accountId(), projectId,
                 request.product(), request.docs(), request.docsUrl(), request.researchWithoutDocs());
-        // 202, not 201: nothing is built yet. The console polls the history below, and the
-        // project's own status is what says whether the sandbox is worth calling.
+        // 202, not 201: nothing is built yet. The console polls the progress route below, and
+        // the project's own status is what says whether the sandbox is worth calling.
+        GenerationService.Progress progress = generations.progress(caller.accountId(), projectId);
         return new StartedResponse(job.id().toString(), job.status().name(),
-                "Generating. This takes a few minutes.");
+                progress.estimatedSeconds(), waitMessage(progress));
+    }
+
+    /**
+     * How long there is left, or what we are waiting on.
+     *
+     * <p>Separate from the history because it answers a different question. History is what
+     * happened; this is when it will be over — and, when a doubt is open, that the clock has
+     * stopped and it is the user's move.
+     */
+    @GetMapping("/progress")
+    ProgressResponse progress(@AuthenticationPrincipal DroviPrincipal caller,
+                              @PathVariable UUID projectId) {
+        GenerationService.Progress progress = generations.progress(caller.accountId(), projectId);
+        return new ProgressResponse(progress.waitingForYou(), progress.openQuestions(),
+                progress.stepsRemaining(), progress.estimatedSeconds(), waitMessage(progress));
+    }
+
+    /** A sentence, because "estimatedSeconds: 180" is not something a person plans around. */
+    private static String waitMessage(GenerationService.Progress progress) {
+        if (progress.waitingForYou()) {
+            return progress.openQuestions() == 1
+                    ? "One question needs your answer before this can finish."
+                    : "%d questions need your answers before this can finish."
+                            .formatted(progress.openQuestions());
+        }
+        if (progress.estimatedSeconds() == null || progress.estimatedSeconds() == 0) {
+            return "Done.";
+        }
+        long minutes = Math.max(1, Math.round(progress.estimatedSeconds() / 60.0));
+        return "Building your sandbox — about %d minute%s.".formatted(minutes, minutes == 1 ? "" : "s");
     }
 
     @GetMapping
