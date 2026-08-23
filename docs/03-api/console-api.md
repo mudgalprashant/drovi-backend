@@ -23,14 +23,13 @@ Base `/api/v1`. JSON. Firebase ID tokens. URLs lowercase, plural, hyphenated; JS
 | API keys | `POST/GET /projects/{id}/keys`, `DELETE .../keys/{keyId}` | ✅ |
 | Data collections | `GET/POST /projects/{id}/collections`, `GET/PATCH/DELETE .../{cid}` | ✅ |
 | Records | `GET/POST .../records`, `GET/PATCH/DELETE .../records/{recordKey}` | ✅ |
-| Spec | read API groups, endpoints, schemas | ❌ Phase 2.4 |
-| Rules | create, reorder, enable/disable, one-shot | ❌ Phase 2.4 |
-| Inspector | `GET /projects/{id}/requests` — keyset paged | ❌ Phase 2.5 |
+| API groups | `GET/POST /projects/{id}/api-groups`, `DELETE .../{groupId}` | ✅ |
+| Endpoints | `GET/POST /projects/{id}/endpoints`, `GET/PATCH/DELETE .../{endpointId}` | ✅ |
+| Rules | `GET/POST .../endpoints/{eid}/rules`, `PATCH/DELETE /projects/{id}/rules/{ruleId}` | ✅ |
+| Inspector | `GET /projects/{id}/requests` — keyset paged | ✅ |
 | Chat | threads, messages, generation status | ❌ Phase 3 |
 
-⚠️ **The gap that matters today:** a user can create a project and seed data, but cannot
-yet wire an endpoint to it — so a console-created sandbox serves 404 for everything until
-Phase 2.4 lands or a route is inserted by SQL.
+**Phase 2 is complete: a whole working sandbox can be built without touching SQL.**
 
 ## Notes on what is implemented
 
@@ -50,6 +49,21 @@ seed writes nothing rather than leaving a half-loaded collection.
 
 **`PATCH .../records/{recordKey}`** is a shallow merge, and the key field is restored
 afterwards — a body cannot silently re-identify an existing record.
+
+**`POST /endpoints`** stores `pathTemplate` **verbatim** — the imitated product's path,
+casing included. The only rule is that it starts with `/`. `apiGroup` names a group and
+creates it if absent; `apiGroupId` targets one explicitly. A data-backed `behavior`
+requires a `dataCollectionId` **in the same project**, checked before the database's own
+composite key would catch it, so a cross-project reference is a clean 400.
+
+The response exposes `specificity` read-only. It is a generated column and explains *why*
+one route wins over another — otherwise invisible, and it looks like a bug to whoever hits
+it.
+
+**`GET /requests`** is paged by **keyset** (`before` = the previous page's `nextCursor`),
+not offset: this is the fastest-growing table in the system and `OFFSET 10000` makes the
+database walk ten thousand rows to throw them away. `unmatchedOnly=true` is the debugging
+view — a call nothing served usually means the spec has a path the real product does not.
 
 ## Invariants for whoever builds it
 

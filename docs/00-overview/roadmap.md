@@ -85,7 +85,7 @@ id**, not a service-account credential. Until one is set the server fails closed
 
 ---
 
-## Phase 2 — Console API  🟡 in progress
+## Phase 2 — Console API  ✅ complete
 
 **Goal:** everything the runtime can do becomes reachable without touching SQL.
 
@@ -97,12 +97,14 @@ mechanical — after this, cost and correctness get interesting.
 | Projects | ✅ create, list, update, archive. The base URL is the artifact |
 | API keys | ✅ issue and revoke; the raw key is returned **once** and never stored |
 | Data | ✅ collections and records, incl. bulk seed, within quota |
-| Spec browsing | ❌ API groups, endpoints, schemas — the Postman-like view |
-| Rules | ❌ create, reorder, enable/disable, one-shot |
-| Inspector | ❌ a tail of `mock_request_log` per project |
+| Spec | ✅ API groups and endpoints — the Postman-like view |
+| Rules | ✅ create, enable/disable, one-shot, priority |
+| Inspector | ✅ keyset-paged tail, with an unmatched-only view |
 
-**Exit criteria:** a user creates a project, seeds data, defines a rule, calls their
-sandbox, and sees the call in the inspector — entirely over HTTP.
+**Exit criteria — met.** A user creates a project, seeds data, declares endpoints, defines
+a rule, calls their sandbox and sees the call in the inspector, entirely over HTTP.
+`EndpointsAndRulesTest.aWholeSandbox_canBeBuiltAndServed_withNoSqlAtAll` is that criterion
+as an executable test.
 
 **Watch:** bulk seed is the highest-volume write path in the system. It must stream and
 batch, and it must check quota *before* the insert, not after.

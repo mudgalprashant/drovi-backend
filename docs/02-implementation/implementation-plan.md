@@ -103,12 +103,12 @@ CRUD plus **bulk seed**, the highest-volume write path in the system.
 | `record_key` | derived from `key_field`, written back into the payload |
 | Counters | never touched from Java — the trigger owns them |
 
-### 2.4 Spec and rules ⬅ **next**
+### 2.4 Spec and rules ✅
 
 Read endpoints for API groups, endpoints and schemas. Write endpoints for rules: create,
 reorder (priority), enable/disable, set `remaining_uses`.
 
-### 2.5 Inspector
+### 2.5 Inspector ✅
 
 `GET /api/v1/projects/{id}/requests` — a keyset-paginated tail of `mock_request_log`.
 Keyset, not offset: this is the fastest-growing table and offset paging degrades on it.
@@ -116,10 +116,11 @@ Keyset, not offset: this is the fastest-growing table and offset paging degrades
 **Phase exit:** create a project, seed data, add a rule, call the sandbox, see the call in
 the inspector — all over HTTP, no SQL.
 
-🟡 **Halfway.** Projects, keys, collections and records are done and tested end to end —
-data seeded through the console is served by the sandbox. What is still missing is endpoint
-management, so a console-created project has no routes and answers 404 until 2.4 lands.
-That gap is deliberately visible in `ConsoleApiTest`, which still inserts a route by SQL.
+✅ **Complete.** A whole working sandbox — project, data, endpoints, rules — can be built
+over HTTP with no SQL at all, and the traffic is inspectable.
+
+Next is **Phase 3 — generation**, whose first slice is the provider adapter *together with*
+its ledger and spend caps. Do not ship one without the other.
 
 ---
 
