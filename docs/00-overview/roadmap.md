@@ -122,6 +122,8 @@ batch, and it must check quota *before* the insert, not after.
 | Job runner | ✅ claim, retry, and the three failure classes |
 | Pipeline | ✅ RESEARCH · SPEC · SEED |
 | Chaining | ✅ RESEARCH → SPEC → one SEED per collection → `READY`, plus the HTTP surface to start one |
+| Clarifications | ✅ the system asks rather than guesses, and stops until answered (ADR-0011) |
+| Wait time | ✅ seconds and a sentence, and honestly nothing while waiting on the user |
 | Chat | ❌ threads, messages, and a tool surface that can only touch the project in scope |
 | REVISE | ❌ "make five customers' cards blocked" applied to an existing sandbox |
 

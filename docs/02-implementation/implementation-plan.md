@@ -336,6 +336,24 @@ the only class that knows the order — the runner stays generic.
 `GenerationPipelineTest.oneSentence_producesAReadySandboxThatServesGeneratedData` — starts at
 an HTTP POST, ends by calling the sandbox over HTTP, no SQL in between and no API key anywhere.
 
+#### Clarifications — asking rather than guessing ✅
+
+**ADR-0011.** A step that is unsure raises questions and the chain *stops*. Doubts are rows,
+kept forever; "you decide" is a first-class answer whose decision is recorded; answers ride
+forward so the same thing is not asked twice.
+
+Resuming works out where it paused by asking the database — the most recent succeeded job is,
+by definition, the one whose successors were never enqueued.
+
+⚠️ The pipeline depends on `ClarificationStore`, **not** `ClarificationService`. The service
+resumes the pipeline, so the other direction is a constructor cycle.
+
+#### Telling the user how long ✅
+
+`GET …/generations/progress` returns seconds and a sentence. Configured, not measured — there
+are no real timings yet. Assumed seed steps before the spec, counted after it. **No estimate at
+all while waiting on the user**, because the clock is not running.
+
 #### Chat and the tool surface ❌
 
 Threads, messages, and tools the model may call. **Scope the tools structurally:**

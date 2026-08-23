@@ -27,7 +27,8 @@ Base `/api/v1`. JSON. Firebase ID tokens. URLs lowercase, plural, hyphenated; JS
 | Endpoints | `GET/POST /projects/{id}/endpoints`, `GET/PATCH/DELETE .../{endpointId}` | ✅ |
 | Rules | `GET/POST .../endpoints/{eid}/rules`, `PATCH/DELETE /projects/{id}/rules/{ruleId}` | ✅ |
 | Inspector | `GET /projects/{id}/requests` — keyset paged | ✅ |
-| Generations | `POST/GET /projects/{id}/generations` | ✅ |
+| Generations | `POST/GET /projects/{id}/generations`, `GET …/progress` | ✅ |
+| Clarifications | `GET /projects/{id}/clarifications`, `POST …/{cid}/answer`, `POST …/{cid}/assume` | ✅ |
 | Chat | threads, messages | ❌ Phase 3.4 |
 
 **Phase 2 is complete: a whole working sandbox can be built without touching SQL.**
@@ -59,6 +60,48 @@ step gave up.
 **`GET /projects/{id}/generations`** is the history: one row per step, newest first, with
 `attempt`, `errorCode` and a message that is always ours and never the provider's.
 
+**`GET /projects/{id}/generations/progress`** answers *how much longer*:
+
+```json
+{"waitingForYou": false, "openQuestions": 0, "stepsRemaining": 4,
+ "estimatedSeconds": 180, "message": "Building your sandbox — about 3 minutes."}
+```
+
+The estimate is **configured, not measured** — there are no real timings yet, and a made-up
+average presented as data is worse than an honest constant ops can correct with one `UPDATE`.
+Before the spec exists the seed steps are assumed; after it they are counted, so the estimate
+gets more truthful as the generation proceeds.
+
+When `waitingForYou` is true there is **no estimate at all**. The clock is not running, and a
+countdown to nothing is worse than nothing.
+
+### Clarifications — the doubts
+
+Generation **stops** rather than guessing when a request is ambiguous in a way that would change
+the sandbox (ADR-0011). Until every question is answered, the sandbox is not built.
+
+**`GET /projects/{id}/clarifications`** — every question ever asked about this project, answered
+ones included. They are kept on purpose: three weeks later, *"we assumed `status = BLOCKED`
+because you did not say"* is something a user needs to be able to find.
+
+```json
+[{"id": "…", "question": "Which field marks a card as blocked?",
+  "detail": "A card carries both status and blocked, and they are not the same thing.",
+  "subject": {"resource": "cards", "field": "status"},
+  "options": [{"id": "opt1", "label": "status = BLOCKED", "detail": "The lifecycle field."},
+              {"id": "opt2", "label": "blocked = true",  "detail": "A separate flag."}],
+  "allowsAssumption": true, "status": "OPEN"}]
+```
+
+**`POST …/{cid}/answer`** takes `{"optionId": "opt1"}` or `{"answer": "free text"}`.
+
+**`POST …/{cid}/assume`** is *"you decide"* — a real answer, not a skip. What was assumed is
+recorded and readable afterwards. Refused with 400 on the rare question where a guess would make
+the sandbox confidently wrong about the very thing the user asked for.
+
+Answering the **last** open question resumes the generation. Answering an already-answered one
+is a 409, so a double click cannot start the chain twice.
+
 ### Two error codes with no route yet
 
 Phase 3.1 added `AI_CAPPED` (429) and `AI_UNAVAILABLE` (503) to the catalog. **No endpoint
@@ -87,7 +130,10 @@ is a legitimate way to say "no".
 
 ## Notes on what is implemented
 
-**`POST /projects`** returns `baseUrl` — the artifact the user came for. Manually created
+**`POST /projects`** returns `baseUrl` — the artifact the user came for. It is
+`{publicBaseUrl}/s/{projectId}`: **the sandbox is addressed by the project's own id**, so the
+identifier in the console URL and the one in the base URL are the same thing. There is no
+separate project key. Manually created
 projects are `READY` immediately; generation will create `DRAFT` ones and promote them.
 
 **`POST /projects/{id}/keys`** is the only response that ever carries `key`. Only a hash
