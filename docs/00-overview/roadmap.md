@@ -119,13 +119,20 @@ batch, and it must check quota *before* the insert, not after.
 | --- | --- |
 | Provider adapter | ✅ `geminiProvider`, resolved by bean name from `ai_provider_config` |
 | Ledger and caps | ✅ every call recorded; kill switch and daily caps enforced **before** the call. ADR-0009 |
-| Pipeline | ❌ RESEARCH → SPEC → SEED as `generation_job`s with retries |
+| Job runner | ✅ claim, retry, and the three failure classes. No handlers yet, so it claims nothing |
+| Pipeline | ❌ RESEARCH → SPEC → SEED — the handlers the runner is waiting for |
 | Chat | ❌ threads, messages, and a tool surface that can only touch the project in scope |
 | REVISE | ❌ "make five customers' cards blocked" applied to an existing sandbox |
 
-**3.1 is done and is the risky half.** The spending machinery exists, is enforced, and is
-proved by 28 tests that need no API key — because a stub provider registers exactly as a real
-one does. Nothing user-facing can reach it yet, which is the intended order.
+**3.1 and 3.2 are done, and 3.1 was the risky half.** The spending machinery exists, is
+enforced, and is proved by tests that need no API key — because a stub provider registers
+exactly as a real one does. The runner that will drive it is built and its state machine is
+tested, but it has no handlers, so nothing runs and nothing user-facing can reach it yet.
+That is the intended order.
+
+**3.3 is blocked on a decision**, not on code: open decision **M** — may the researcher use
+web search, or must it be given docs? It changes the accuracy, the cost and the legal posture
+of every generation, so it is not an agent's to settle.
 
 **Exit criteria:** from one sentence — *"mimic Stripe's card API"* — a project reaches
 `READY` with endpoints, schemas and seed data, and its base URL serves them.

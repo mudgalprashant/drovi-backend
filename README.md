@@ -60,10 +60,11 @@ Full rules: [docs/02-implementation/branching-and-workflow.md](docs/02-implement
 | Identity | ✅ Firebase ID tokens verified as JWTs; deny by default. Needs `DROVI_FIREBASE_PROJECT_ID` to go live, and fails closed without it |
 | Console API | ✅ projects, keys, collections, records, API groups, endpoints, rules, inspector — a whole sandbox with no SQL |
 | Model spend controls | ✅ provider adapter, ledger and caps (Phase 3.1). Testable with no API key |
-| Generation / chat | ❌ no pipeline, no job runner, no chat — Phase 3.2–3.4 |
+| Generation job runner | ✅ claim, retry, backoff (Phase 3.2). **No handlers yet**, so it claims nothing |
+| Generation / chat | ❌ no RESEARCH → SPEC → SEED pipeline, no chat — Phase 3.3–3.4 |
 | Console (web app) | ❌ not started |
 
-105 tests green against a real embedded Postgres.
+126 tests green against a real embedded Postgres.
 
 The runtime is real: seed a project and it serves. What it cannot yet do is
 *generate* one from a chat message — that is the next slice, and it is the one

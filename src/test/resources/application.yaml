@@ -1,0 +1,9 @@
+# Test-wide overrides. Everything else comes from the main application.yaml, deliberately —
+# a test profile that redefines the world proves the test's configuration, not the app's.
+drovi:
+  jobs:
+    # No background thread claiming generation_job rows while other tests are setting up
+    # their fixtures. Tests that exercise the runner's state machine call it directly;
+    # JobSchedulingTest turns the scheduler back on for itself, because "does @Scheduled
+    # actually fire" is exactly the kind of thing that cannot be assumed.
+    scheduler-enabled: false

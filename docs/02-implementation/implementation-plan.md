@@ -164,12 +164,58 @@ as *zero*. See ADR-0009 for why the two failure directions are not symmetric.
 reaches the gateway until 3.2 and 3.4 exist, which is deliberate — the controls were built
 before the thing that spends, not alongside a route that could exercise it.
 
-### 3.2 Job runner
+### 3.2 Job runner ✅
 
-`generation_job` moves `QUEUED → RUNNING → SUCCEEDED|FAILED`, with `attempt` for retries —
-unparseable model output is a retry, not a failure. In-process `@Scheduled` poller at one
-instance; claim a job with a conditional `UPDATE … WHERE status = 'QUEUED'` so two pollers
-cannot claim the same row.
+`generation_job` moves `QUEUED → RUNNING → SUCCEEDED|FAILED`, claimed by an in-process
+`@Scheduled` poller. **No handlers yet** — 3.3 supplies them — so the runner claims nothing
+in production today.
+
+| Piece | Detail |
+| --- | --- |
+| `JobStore` | every read and write of `generation_job`, all short transactions |
+| `JobRunner` | one claim per tick, one job in flight. Owns *every* status transition |
+| `JobHandler` | the SPI 3.3 implements. Called with no transaction open |
+| `SchedulingConfig` | `@EnableScheduling`, which Boot does **not** do for you |
+
+**Claiming.** `FOR UPDATE SKIP LOCKED` inside the conditional `WHERE status = 'QUEUED'`.
+Both stop two runners taking the same row, but the plain conditional update makes the loser
+block on the winner's lock and then match nothing — it waits for a write it cannot win.
+
+The claim also **filters on the kinds a handler exists for**. Without that, one queued job
+of an unhandled kind sits at the head of the queue, is re-claimed every tick forever, and
+nothing behind it runs. The full test suite found this; the isolated tests could not.
+
+**`attempt` is incremented at claim, not at failure.** A job that kills its runner every
+time would otherwise be retried forever.
+
+**Three failure classes**, because they want different things:
+
+| Class | Example | Outcome |
+| --- | --- | --- |
+| Retryable | unparseable model output | requeue, bounded by `ai.max.attempts` |
+| Terminal | the model `REFUSED` | `FAILED` at once — asking again spends money to be told no twice |
+| Nobody's fault | spend capped, no provider configured | requeue **without charging an attempt**, and pause |
+
+That third row is the one worth defending. A weekend with the kill switch off must not
+quietly exhaust every queued job's retries and leave them `FAILED` on Monday for a reason
+that had nothing to do with them.
+
+**Pausing** is only for states affecting every job equally. A global pause triggered by one
+unrunnable job is head-of-line blocking wearing a different hat.
+
+**Cadence is a Spring property; the on/off switch is an `app_config` row.** `@Scheduled`
+resolves its interval once at startup and cannot read a table — but the half that matters
+during an incident (`ai.job.runner.enabled`) is ops-changeable, and turning it off leaves
+jobs `QUEUED` rather than failing them.
+
+**Tested** — 20 tests, no API key and no network. `GenerationJobRunnerTest` (19) drives the
+state machine directly against a stub handler. `JobSchedulingTest` (1) is the only test that
+waits on the clock, and it exists because a missing `@EnableScheduling` would leave every
+job `QUEUED` with no error to explain it — the same shape as the inert `@Cacheable`
+annotations already in this codebase. Verified to fail when the annotation is removed.
+
+⚠️ **Still missing: the sweeper.** A runner killed mid-job leaves its row `RUNNING` and
+nothing reclaims it, so `ai.job.timeout.seconds` remains decorative. That is Phase 5.2.
 
 ### 3.3 The pipeline
 

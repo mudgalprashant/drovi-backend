@@ -108,6 +108,27 @@ drovi:
   # value here ends up pasted into every user's codebase. Not a secret.
   public-base-url: ${DROVI_PUBLIC_BASE_URL:http://localhost:8080}
 
+  jobs:
+    # The generation job runner's CADENCE. It lives here and not in app_config because
+    # @Scheduled resolves its interval once at startup and cannot read a table.
+    #
+    # Whether the runner claims anything at all IS an app_config row
+    # (ai.job.runner.enabled), which is the half that matters during an incident: it can
+    # be turned off without a deploy, and it leaves jobs QUEUED rather than failing them.
+    #
+    # One job per tick, one job in flight. The provider's free tier allows 15 requests a
+    # minute and one generation is many sequential calls, so the runner paces itself
+    # rather than fanning out. Raising this does not make generation faster; it makes it
+    # 429. Check the provider tier before tuning.
+    poll-interval-ms: ${DROVI_JOB_POLL_INTERVAL_MS:5000}
+
+    # Let the application finish starting before the first claim. A job that begins while
+    # Flyway is still migrating fails for a reason that has nothing to do with the job.
+    initial-delay-ms: ${DROVI_JOB_INITIAL_DELAY_MS:15000}
+
+    # Scheduling itself. Off in tests; see SchedulingConfig.
+    scheduler-enabled: ${DROVI_JOB_SCHEDULER_ENABLED:true}
+
 server:
   port: ${DROVI_PORT:8080}
   shutdown: graceful
