@@ -222,8 +222,13 @@ nothing reclaims it, so `ai.job.timeout.seconds` remains decorative. That is Pha
 | Purpose | Produces | State |
 | --- | --- | --- |
 | RESEARCH | a description of the real product's API surface | ✅ **done** |
-| SPEC | `api_collection`, `api_endpoint`, schemas, envelopes | ❌ must set `path_template` **verbatim** |
-| SEED | `sandbox_collection`, `sandbox_record` | ❌ quota-checked; **synthetic data only** |
+| SPEC | `api_collection`, `api_endpoint`, `sandbox_collection` | ✅ **done** |
+| SEED | `sandbox_record` | ✅ **done** |
+
+⚠️ **Correction to the original table:** it listed `sandbox_collection` under SEED. The
+foreign keys do not allow that — a data-backed `api_endpoint` requires its collection to
+exist, and the database refuses the endpoint otherwise. SPEC declares the collections, which
+are *structure*; SEED fills them with *data*.
 
 #### RESEARCH ✅
 
@@ -250,6 +255,63 @@ ones, and encoding them into `prompt` would put a parser between a user's words 
 
 Structured outputs, not free-text parsing. Validate before writing: a malformed spec must
 fail the job, never half-populate a project.
+
+#### SPEC ✅
+
+Three phases in a fixed order, and the order is the design: **call the model with no
+transaction open, validate the whole plan with nothing written, then write all of it in one
+transaction.**
+
+A project with three of its eight routes is worse than one with none — it looks finished, so
+the user integrates against it and meets the rest as 404s from their own code.
+
+`SpecPlan` rejects, before anything is written, what would otherwise surface at request time:
+
+| Rejected | Would otherwise be |
+| --- | --- |
+| a GET with two path params and no stated key | an endpoint that resolves no record, at request time |
+| a duplicate `method + path` | a 409 partway through the write |
+| an endpoint bound to an undeclared collection | a composite-key violation after earlier rows landed |
+| no collections, or no endpoints | a project that serves nothing |
+
+Writing goes through `ApiSpecService` and `SandboxDataService`, not the repositories — they
+already enforce ownership, plan limits, verbatim paths and same-project binding, and a second
+write path is one that eventually stops checking something the first one checks.
+
+Three boundaries worth keeping:
+
+- **Generation never creates a project.** `ProjectService.create` is where the plan's project
+  limit is enforced; a pipeline that could conjure projects would route around it. A SPEC job
+  with no project fails terminally, before the model is called.
+- **Generation never renames one either.** The user chose that name. The model's suggestion is
+  returned for the console to offer.
+- **Auth mode *is* set from research** — that is a property of the imitation, not a user
+  preference. A replica that waves everything through never exercises the caller's auth path.
+
+The plan's endpoint ceiling is told to the model as well as enforced after it. A model that
+knows the limit picks the endpoints that matter; one that does not produces forty and has half
+rejected.
+
+#### SEED ✅
+
+**One collection per job.** That is the pacing, not a limitation: the free tier allows 15
+requests a minute, the runner takes one job per tick, and a handler looping over eight
+collections would defeat both. A failing collection also retries alone.
+
+The response schema is built from the `recordSchema` SPEC produced, so records share the
+collection's fields rather than each inventing their own.
+
+| Guard | Why |
+| --- | --- |
+| duplicate ids within a batch → retry | both rows would be written; `RecordWriter` checks the database, and neither is in it yet |
+| a full project → **terminal** | the next attempt writes the same rows into the same full project |
+| record count clamped to `ai.seed.records.max` | model-generated rows are billed per token |
+
+⚠️ **Synthetic data is enforced by instruction, not by a check**, and that is stated rather
+than implied. There is no structural control where the step's job is to invent content, and
+the obvious mechanical check — rejecting Luhn-valid card numbers — would reject exactly the
+values a faithful Stripe mock *should* contain. The prompt names the published test-value
+convention instead.
 
 ### 3.4 Chat and the tool surface
 
