@@ -73,7 +73,7 @@ machinery nobody exercises.
 Entities exist for only 5 of 18 tables. This phase adds the rest, or reaches them with
 `JdbcTemplate` — decide per table, and do not add an entity nothing needs.
 
-### 2.1 Projects
+### 2.1 Projects ✅
 
 `POST/GET /api/v1/projects`, `GET/PATCH/DELETE /api/v1/projects/{id}`.
 
@@ -84,7 +84,7 @@ Entities exist for only 5 of 18 tables. This phase adds the rest, or reaches the
 | Plan limit | `max_projects` checked at create |
 | Archive | soft; `isServing()` already gates the runtime |
 
-### 2.2 API keys
+### 2.2 API keys ✅
 
 `POST /api/v1/projects/{id}/keys`, `DELETE .../keys/{keyId}`.
 
@@ -92,7 +92,7 @@ The raw key is returned **once**, in the create response, and never stored — o
 `key_hash` (SHA-256) and `key_prefix`. Reuse `SandboxAuthenticator.sha256` so issuing and
 verifying can never disagree.
 
-### 2.3 Data collections and records
+### 2.3 Data collections and records ✅
 
 CRUD plus **bulk seed**, the highest-volume write path in the system.
 
@@ -103,7 +103,7 @@ CRUD plus **bulk seed**, the highest-volume write path in the system.
 | `record_key` | derived from `key_field`, written back into the payload |
 | Counters | never touched from Java — the trigger owns them |
 
-### 2.4 Spec and rules
+### 2.4 Spec and rules ⬅ **next**
 
 Read endpoints for API groups, endpoints and schemas. Write endpoints for rules: create,
 reorder (priority), enable/disable, set `remaining_uses`.
@@ -115,6 +115,11 @@ Keyset, not offset: this is the fastest-growing table and offset paging degrades
 
 **Phase exit:** create a project, seed data, add a rule, call the sandbox, see the call in
 the inspector — all over HTTP, no SQL.
+
+🟡 **Halfway.** Projects, keys, collections and records are done and tested end to end —
+data seeded through the console is served by the sandbox. What is still missing is endpoint
+management, so a console-created project has no routes and answers 404 until 2.4 lands.
+That gap is deliberately visible in `ConsoleApiTest`, which still inserts a route by SQL.
 
 ---
 

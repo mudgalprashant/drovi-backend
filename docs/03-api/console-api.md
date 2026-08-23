@@ -1,17 +1,13 @@
 ---
 title: The console API
-status: NOT BUILT
+status: partially implemented
 last_updated: 2026-08-23
 ---
 
 # The console API
 
-⚠️ **Nothing here exists.** No controller outside `MockController`, and **no
-authentication filter runs** — which is precisely why no console route has been added yet:
-it would be public to the internet.
-
-This document is the specification to build against in Phases 1–2, not a description of
-what is there.
+Authenticated with a Firebase ID token, deny by default. Projects, API keys and data are
+implemented; the spec, rules and inspector surfaces are not.
 
 ## Shape
 
@@ -20,17 +16,40 @@ Base `/api/v1`. JSON. Firebase ID tokens. URLs lowercase, plural, hyphenated; JS
 
 ## Required surface
 
-| Area | Endpoints | Phase |
+| Area | Endpoints | State |
 | --- | --- | --- |
-| Identity | `GET /me`, `GET /me/entitlements` | 1 |
-| Projects | `POST/GET /projects`, `GET/PATCH/DELETE /projects/{id}` | 2 |
-| API keys | `POST /projects/{id}/keys`, `DELETE /projects/{id}/keys/{keyId}` | 2 |
-| Data collections | CRUD + **bulk seed** | 2 |
-| Records | CRUD, paged, filterable | 2 |
-| Spec | read API groups, endpoints, schemas | 2 |
-| Rules | create, reorder, enable/disable, one-shot | 2 |
-| Inspector | `GET /projects/{id}/requests` — keyset paged | 2 |
-| Chat | threads, messages, generation status | 3 |
+| Identity | `GET /me`, `GET /me/entitlements` | ✅ |
+| Projects | `POST/GET /projects`, `GET/PATCH/DELETE /projects/{id}` | ✅ |
+| API keys | `POST/GET /projects/{id}/keys`, `DELETE .../keys/{keyId}` | ✅ |
+| Data collections | `GET/POST /projects/{id}/collections`, `GET/PATCH/DELETE .../{cid}` | ✅ |
+| Records | `GET/POST .../records`, `GET/PATCH/DELETE .../records/{recordKey}` | ✅ |
+| Spec | read API groups, endpoints, schemas | ❌ Phase 2.4 |
+| Rules | create, reorder, enable/disable, one-shot | ❌ Phase 2.4 |
+| Inspector | `GET /projects/{id}/requests` — keyset paged | ❌ Phase 2.5 |
+| Chat | threads, messages, generation status | ❌ Phase 3 |
+
+⚠️ **The gap that matters today:** a user can create a project and seed data, but cannot
+yet wire an endpoint to it — so a console-created sandbox serves 404 for everything until
+Phase 2.4 lands or a route is inserted by SQL.
+
+## Notes on what is implemented
+
+**`POST /projects`** returns `baseUrl` — the artifact the user came for. Manually created
+projects are `READY` immediately; generation will create `DRAFT` ones and promote them.
+
+**`POST /projects/{id}/keys`** is the only response that ever carries `key`. Only a hash
+and a display prefix are stored, so it cannot be produced again — the response includes an
+explicit warning for the console to surface.
+
+**`DELETE /projects/{id}`** archives. The sandbox stops serving; records and request log
+survive.
+
+**`POST .../records`** accepts `{"record": {…}}` or `{"records": [ … ]}`, up to 1000 per
+request. Quota is checked **once for the whole batch before any insert**, so an over-quota
+seed writes nothing rather than leaving a half-loaded collection.
+
+**`PATCH .../records/{recordKey}`** is a shallow merge, and the key field is restored
+afterwards — a body cannot silently re-identify an existing record.
 
 ## Invariants for whoever builds it
 
