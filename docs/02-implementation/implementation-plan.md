@@ -313,7 +313,30 @@ the obvious mechanical check — rejecting Luhn-valid card numbers — would rej
 values a faithful Stripe mock *should* contain. The prompt names the published test-value
 convention instead.
 
-### 3.4 Chat and the tool surface
+### 3.4 Chaining, chat, and the tool surface
+
+#### Chaining ✅
+
+RESEARCH → SPEC → one SEED per collection → the project is `READY`. In `GenerationPipeline`,
+the only class that knows the order — the runner stays generic.
+
+| Decision | Reason |
+| --- | --- |
+| a job's success and its successors write in **one transaction** | split, the chain breaks both ways: a successor against a predecessor never marked succeeded, or a success with nothing following and a generation that stops silently |
+| `JobChain.after` is a **calculation**, not a write | which is what makes the above possible |
+| SEED fans out **one job per collection** | not parallelism — the runner still takes one job per tick. It paces the calls against 15/minute, and a collection that will not generate retries alone |
+| the last step asks **"is anything else outstanding?"** | it cannot know it is last. Counting expected steps would need the count to survive a retry, a requeue and a failure |
+| `GENERATING` stops the sandbox serving | routes and data appear together, not one endpoint at a time |
+| a terminal failure marks the project `FAILED` | a project that merely never becomes ready is indistinguishable from one still working, forever |
+
+**HTTP:** `POST /api/v1/projects/{id}/generations` (202) and `GET` for the history. See
+`docs/03-api/console-api.md`.
+
+**Phase exit criterion, as a test:**
+`GenerationPipelineTest.oneSentence_producesAReadySandboxThatServesGeneratedData` — starts at
+an HTTP POST, ends by calling the sandbox over HTTP, no SQL in between and no API key anywhere.
+
+#### Chat and the tool surface ❌
 
 Threads, messages, and tools the model may call. **Scope the tools structurally:**
 

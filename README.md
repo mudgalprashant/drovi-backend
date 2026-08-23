@@ -62,10 +62,11 @@ Full rules: [docs/02-implementation/branching-and-workflow.md](docs/02-implement
 | Model spend controls | ✅ provider adapter, ledger and caps (Phase 3.1). Testable with no API key |
 | Generation job runner | ✅ claim, retry, backoff (Phase 3.2). **No handlers yet**, so it claims nothing |
 | Generation pipeline | ✅ RESEARCH → SPEC → SEED. Docs recommended, never required (ADR-0010) |
-| Chat, and chaining the steps | ❌ each step is enqueued on its own; nothing joins them yet — Phase 3.4 |
+| Chaining, and the HTTP surface | ✅ describe a product, get a `READY` sandbox that serves data (Phase 3.4) |
+| Chat, and the model's tool surface | ❌ threads, messages, REVISE — the rest of Phase 3.4 |
 | Console (web app) | ❌ not started |
 
-170 tests green against a real embedded Postgres.
+183 tests green against a real embedded Postgres.
 
 The runtime is real: seed a project and it serves. What it cannot yet do is
 *generate* one from a chat message — that is the next slice, and it is the one

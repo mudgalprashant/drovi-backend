@@ -27,9 +27,37 @@ Base `/api/v1`. JSON. Firebase ID tokens. URLs lowercase, plural, hyphenated; JS
 | Endpoints | `GET/POST /projects/{id}/endpoints`, `GET/PATCH/DELETE .../{endpointId}` | ✅ |
 | Rules | `GET/POST .../endpoints/{eid}/rules`, `PATCH/DELETE /projects/{id}/rules/{ruleId}` | ✅ |
 | Inspector | `GET /projects/{id}/requests` — keyset paged | ✅ |
-| Chat | threads, messages, generation status | ❌ Phase 3 |
+| Generations | `POST/GET /projects/{id}/generations` | ✅ |
+| Chat | threads, messages | ❌ Phase 3.4 |
 
 **Phase 2 is complete: a whole working sandbox can be built without touching SQL.**
+**Phase 3 adds the other way to build one: describe it.**
+
+### Generations
+
+**`POST /projects/{id}/generations`** returns **202**, not 201 — nothing is built yet. A
+generation takes minutes, so the request enqueues a chain and returns; the console polls
+`GET` below, and the *project's own status* is what says whether the sandbox is worth calling.
+
+```json
+{"product": "Stripe's card API", "docs": "…", "docsUrl": "…", "agentResearchOnly": true}
+```
+
+`docs` is **recommended, never required** (ADR-0010). With neither `docs` nor
+`agentResearchOnly`, the job fails asking for one — absent and *declined* are different
+requests, and collapsing them would hand every caller the least accurate path.
+
+Refused with **409** if a generation is already running for the project, or if the project
+already has endpoints. The second is also checked by SPEC, but only after research has been
+paid for; failing at the HTTP call is the difference between a clear 409 and a surprise on the
+bill.
+
+While the chain runs the project is `GENERATING` and **the sandbox does not serve** — routes
+and data appear together rather than one endpoint at a time. It ends `READY`, or `FAILED` if a
+step gave up.
+
+**`GET /projects/{id}/generations`** is the history: one row per step, newest first, with
+`attempt`, `errorCode` and a message that is always ours and never the provider's.
 
 ### Two error codes with no route yet
 
@@ -45,6 +73,17 @@ rather than inventing a third:
 
 Both return a fixed generic message. The detail that names a variable, a row or a cap goes
 to the log only — see ADR-0009.
+
+### A body that will not parse is a 400
+
+Until Phase 3.4 it was a **500**, for every route here: `HttpMessageNotReadableException` had
+no handler and fell through to the catch-all. The caller was told the server had broken when
+their JSON had. Jackson's own message is logged rather than returned — it quotes the offending
+input, and on the generation route that input can be a user's pasted documentation.
+
+⚠️ **Jackson 3 will not map an absent field onto a primitive.** A request record with a
+`boolean` component rejects any body that omits it, before validation runs. Box it when absent
+is a legitimate way to say "no".
 
 ## Notes on what is implemented
 
