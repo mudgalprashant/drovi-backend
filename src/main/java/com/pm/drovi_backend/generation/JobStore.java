@@ -6,9 +6,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.sql.ResultSet;
 import java.util.Collections;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -26,7 +29,16 @@ import java.util.UUID;
 @Slf4j
 public class JobStore {
 
-    private static final RowMapper<GenerationJob> JOB = (ResultSet rs, int row) -> new GenerationJob(
+    private static final String COLUMNS =
+            "id, account_id, project_id, thread_id, kind, status, prompt, attempt, input";
+
+    private static final TypeReference<Map<String, Object>> JSON_OBJECT = new TypeReference<>() {
+    };
+
+    private final JdbcTemplate jdbc;
+    private final ObjectMapper mapper;
+
+    private final RowMapper<GenerationJob> job = (ResultSet rs, int row) -> new GenerationJob(
             rs.getObject("id", UUID.class),
             rs.getObject("account_id", UUID.class),
             rs.getObject("project_id", UUID.class),
@@ -34,19 +46,29 @@ public class JobStore {
             JobKind.valueOf(rs.getString("kind")),
             JobStatus.valueOf(rs.getString("status")),
             rs.getString("prompt"),
-            rs.getInt("attempt"));
+            rs.getInt("attempt"),
+            readInput(rs.getString("input")));
 
-    private final JdbcTemplate jdbc;
+    private Map<String, Object> readInput(String json) {
+        return json == null || json.isBlank() ? Map.of() : mapper.readValue(json, JSON_OBJECT);
+    }
 
     @Transactional
     public GenerationJob enqueue(UUID accountId, UUID projectId, UUID threadId, JobKind kind, String prompt) {
-        GenerationJob job = jdbc.queryForObject("""
-                INSERT INTO generation_job (account_id, project_id, thread_id, kind, prompt)
-                VALUES (?, ?, ?, ?, ?)
-                RETURNING id, account_id, project_id, thread_id, kind, status, prompt, attempt
-                """, JOB, accountId, projectId, threadId, kind.name(), prompt);
-        log.info("job.enqueued jobId={} kind={} accountId={}", job.id(), kind, accountId);
-        return job;
+        return enqueue(accountId, projectId, threadId, kind, prompt, Map.of());
+    }
+
+    @Transactional
+    public GenerationJob enqueue(UUID accountId, UUID projectId, UUID threadId, JobKind kind,
+                                 String prompt, Map<String, Object> input) {
+        GenerationJob enqueued = jdbc.queryForObject("""
+                INSERT INTO generation_job (account_id, project_id, thread_id, kind, prompt, input)
+                VALUES (?, ?, ?, ?, ?, ?::jsonb)
+                RETURNING %s
+                """.formatted(COLUMNS), job, accountId, projectId, threadId, kind.name(), prompt,
+                mapper.writeValueAsString(input == null ? Map.of() : input));
+        log.info("job.enqueued jobId={} kind={} accountId={}", enqueued.id(), kind, accountId);
+        return enqueued;
     }
 
     /**
@@ -98,9 +120,9 @@ public class JobStore {
                               LIMIT 1
                               FOR UPDATE SKIP LOCKED)
                    AND status = 'QUEUED'
-                RETURNING id, account_id, project_id, thread_id, kind, status, prompt, attempt
-                """.formatted(placeholders),
-                rs -> rs.next() ? Optional.of(JOB.mapRow(rs, 1)) : Optional.<GenerationJob>empty(),
+                RETURNING %s
+                """.formatted(placeholders, COLUMNS),
+                rs -> rs.next() ? Optional.of(job.mapRow(rs, 1)) : Optional.<GenerationJob>empty(),
                 kinds);
     }
 
@@ -166,8 +188,8 @@ public class JobStore {
     @Transactional(readOnly = true)
     public Optional<GenerationJob> find(UUID jobId) {
         return jdbc.query("""
-                SELECT id, account_id, project_id, thread_id, kind, status, prompt, attempt
-                  FROM generation_job WHERE id = ?
-                """, rs -> rs.next() ? Optional.of(JOB.mapRow(rs, 1)) : Optional.<GenerationJob>empty(), jobId);
+                SELECT %s FROM generation_job WHERE id = ?
+                """.formatted(COLUMNS),
+                rs -> rs.next() ? Optional.of(job.mapRow(rs, 1)) : Optional.<GenerationJob>empty(), jobId);
     }
 }

@@ -2,6 +2,7 @@ package com.pm.drovi_backend.generation;
 
 import com.pm.drovi_backend.ai.AiCallContext;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -14,6 +15,9 @@ import java.util.UUID;
  * @param attempt how many times this job has been claimed, <em>including the current
  *                claim</em> — the counter is incremented as part of claiming, so a job whose
  *                runner is killed mid-flight has already paid for that attempt
+ * @param input   this kind of job's structured parameters. <strong>Untrusted</strong>: a
+ *                user's pasted documentation lands here verbatim, and it is data rather than
+ *                instructions no matter how imperatively it is worded
  */
 public record GenerationJob(UUID id,
                             UUID accountId,
@@ -22,7 +26,12 @@ public record GenerationJob(UUID id,
                             JobKind kind,
                             JobStatus status,
                             String prompt,
-                            int attempt) {
+                            int attempt,
+                            Map<String, Object> input) {
+
+    public GenerationJob {
+        input = input == null ? Map.of() : Map.copyOf(input);
+    }
 
     /**
      * The context every model call this job makes must carry, so spend lands on the right

@@ -13,16 +13,15 @@ import com.pm.drovi_backend.generation.JobStore;
 import com.pm.drovi_backend.generation.RetryableJobException;
 import com.pm.drovi_backend.generation.TerminalJobException;
 import com.pm.drovi_backend.support.PostgresTestBase;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -44,7 +43,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * without an API key, a network, or a pipeline that does not exist yet.
  */
 @SpringBootTest
-@Import(GenerationJobRunnerTest.StubHandlerConfig.class)
 class GenerationJobRunnerTest extends PostgresTestBase {
 
     /** Stands in for Phase 3.3's real handlers. RESEARCH because it is the pipeline's first step. */
@@ -67,29 +65,29 @@ class GenerationJobRunnerTest extends PostgresTestBase {
         }
     }
 
-    @TestConfiguration
-    static class StubHandlerConfig {
-        @Bean
-        StubHandler stubHandler() {
-            return new StubHandler();
-        }
-    }
-
-    @Autowired
-    JobRunner runner;
     @Autowired
     JobStore jobs;
     @Autowired
-    StubHandler handler;
-    @Autowired
     AppConfigService config;
     @Autowired
+    ObjectMapper mapper;
+    @Autowired
     JdbcTemplate jdbc;
+
+    /**
+     * Built here rather than injected. {@link JobRunner} is a plain class over real
+     * infrastructure beans, so constructing one with exactly the handlers a test wants is both
+     * simpler and durable: the real handlers land one per slice, and an injected runner would
+     * collide with this stub the moment one of them claimed the same kind.
+     */
+    private JobRunner runner;
+    private final StubHandler handler = new StubHandler();
 
     private UUID account;
 
     @BeforeEach
     void resetTheQueue() {
+        runner = new JobRunner(jobs, config, mapper, List.of(handler));
         jdbc.update("DELETE FROM generation_job");
         setConfig("ai.job.runner.enabled", "true");
         setConfig("ai.max.attempts", "3");
