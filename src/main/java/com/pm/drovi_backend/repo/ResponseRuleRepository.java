@@ -13,6 +13,11 @@ public interface ResponseRuleRepository extends JpaRepository<ResponseRule, UUID
 
     List<ResponseRule> findByEndpointIdAndEnabledTrueOrderByPriorityAscCreatedAtAsc(UUID endpointId);
 
+    /** Console listing — includes disabled rules, which the runtime's query does not. */
+    List<ResponseRule> findByEndpointIdOrderByPriorityAscCreatedAtAsc(UUID endpointId);
+
+    java.util.Optional<ResponseRule> findByIdAndProjectId(UUID id, UUID projectId);
+
     /**
      * Consumes one use of an N-shot rule.
      *

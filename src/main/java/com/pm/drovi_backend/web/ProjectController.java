@@ -5,6 +5,7 @@ import com.pm.drovi_backend.domain.ProjectApiKey;
 import com.pm.drovi_backend.domain.SandboxProject;
 import com.pm.drovi_backend.identity.DroviPrincipal;
 import com.pm.drovi_backend.project.ApiKeyService;
+import com.pm.drovi_backend.project.InspectorService;
 import com.pm.drovi_backend.project.ProjectService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -32,6 +33,7 @@ class ProjectController {
 
     private final ProjectService projects;
     private final ApiKeyService apiKeys;
+    private final InspectorService inspector;
     private final DroviProperties properties;
 
     // --- requests ------------------------------------------------------------
@@ -147,6 +149,21 @@ class ProjectController {
     void revokeKey(@AuthenticationPrincipal DroviPrincipal principal,
                    @PathVariable UUID projectId, @PathVariable UUID keyId) {
         apiKeys.revoke(principal.accountId(), projectId, keyId);
+    }
+
+    // --- inspector -----------------------------------------------------------
+
+    /**
+     * A tail of what the sandbox served. {@code unmatchedOnly=true} is the debugging view:
+     * a call nothing matched usually means the spec has a path the real product does not.
+     */
+    @GetMapping("/{projectId}/requests")
+    InspectorService.Page requests(@AuthenticationPrincipal DroviPrincipal principal,
+                                   @PathVariable UUID projectId,
+                                   @RequestParam(required = false) Integer limit,
+                                   @RequestParam(required = false) Long before,
+                                   @RequestParam(defaultValue = "false") boolean unmatchedOnly) {
+        return inspector.tail(principal.accountId(), projectId, limit, before, unmatchedOnly);
     }
 
     private ProjectResponse toResponse(SandboxProject project) {
