@@ -354,6 +354,31 @@ resumes the pipeline, so the other direction is a constructor cycle.
 are no real timings yet. Assumed seed steps before the spec, counted after it. **No estimate at
 all while waiting on the user**, because the clock is not running.
 
+#### REVISE — changing an existing sandbox ✅
+
+The end goal's headline example, and the step where a model's output acts on a user's data.
+
+**The model produces a PLAN; the platform applies it.** `RevisePlan` can name a collection by
+its *code* and nothing else — no project id, no account id, no table name, no SQL. `ReviseWriter`
+resolves each code against the caller's own project, so a plan cannot express a write to another
+tenant, a plan, a quota or `app_config`. **Unreachable, not forbidden.**
+
+That is deliberately not a tool-calling loop. A tool loop can be talked into a call it should not
+make; a plan can only say what the type can hold.
+
+| Refusal | Reason |
+| --- | --- |
+| `UPDATE`/`DELETE` naming no records | "change the cards" must not mean all of them by omission |
+| an oversized change | **refused, not clamped** — a partial application the user can only discover by counting |
+| a match selecting more than the ceiling | the same failure by another route: fetch `limit + 1` and refuse |
+| an unknown collection | fails the whole plan, so a valid change beside an invalid one does not survive |
+
+Applied in one transaction. **The sandbox keeps serving** — a revision does not change project
+status the way a generation does.
+
+Ambiguity reuses the clarification loop. A deferred revision changed nothing, so answering
+re-runs *the revision itself* rather than moving to a successor.
+
 #### Chat and the tool surface ❌
 
 Threads, messages, and tools the model may call. **Scope the tools structurally:**

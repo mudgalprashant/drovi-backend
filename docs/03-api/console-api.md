@@ -29,6 +29,7 @@ Base `/api/v1`. JSON. Firebase ID tokens. URLs lowercase, plural, hyphenated; JS
 | Inspector | `GET /projects/{id}/requests` — keyset paged | ✅ |
 | Generations | `POST/GET /projects/{id}/generations`, `GET …/progress` | ✅ |
 | Clarifications | `GET /projects/{id}/clarifications`, `POST …/{cid}/answer`, `POST …/{cid}/assume` | ✅ |
+| Revisions | `POST /projects/{id}/revisions` | ✅ |
 | Chat | threads, messages | ❌ Phase 3.4 |
 
 **Phase 2 is complete: a whole working sandbox can be built without touching SQL.**
@@ -44,7 +45,10 @@ generation takes minutes, so the request enqueues a chain and returns; the conso
 {"product": "Stripe's card API", "docs": "…", "docsUrl": "…", "agentResearchOnly": true}
 ```
 
-`docs` is **recommended, never required** (ADR-0010). With neither `docs` nor
+`docs` is **recommended, never required** (ADR-0010). An **OpenAPI/Swagger document or a
+Postman collection pasted into `docs`** is treated as authoritative and transcribed rather than
+recalled — the most accurate input available today. Nothing is fetched: paste the document,
+do not link it. With neither `docs` nor
 `agentResearchOnly`, the job fails asking for one — absent and *declined* are different
 requests, and collapsing them would hand every caller the least accurate path.
 
@@ -74,6 +78,29 @@ gets more truthful as the generation proceeds.
 
 When `waitingForYou` is true there is **no estimate at all**. The clock is not running, and a
 countdown to nothing is worse than nothing.
+
+### Revisions — changing a sandbox that exists
+
+**`POST /projects/{id}/revisions`** takes `{"instruction": "make five customers' cards blocked"}`
+and returns **202**. Asynchronous for the same reason a generation is: it is a model call.
+
+**The sandbox keeps serving throughout.** The change lands in one transaction, so a caller sees
+the state before or the state after and never half of one — taking a working sandbox offline to
+adjust five records would be a poor trade.
+
+If the instruction is ambiguous, **nothing is changed** and questions appear under
+`/clarifications`. Answering the last one re-runs the revision with the answers.
+
+Refused with **409** while something else is running for the project, or when the sandbox has no
+endpoints yet — there is nothing to revise.
+
+Three things a revision cannot do, by construction rather than by check:
+
+| | |
+| --- | --- |
+| touch another project, a plan, a quota or `app_config` | the plan the model produces can only name a collection *code*, resolved against the caller's own project. Those are unreachable, not forbidden |
+| rewrite a whole collection because the sentence was vague | an `UPDATE`/`DELETE` naming no records is refused |
+| apply part of a change | oversized changes are **refused, not clamped**, and the whole plan is one transaction |
 
 ### Clarifications — the doubts
 

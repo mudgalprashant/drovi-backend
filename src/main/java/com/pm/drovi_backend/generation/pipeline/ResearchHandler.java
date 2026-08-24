@@ -70,6 +70,10 @@ class ResearchHandler implements JobHandler {
             records, so "a card has these fields" is more useful than "there is an endpoint".
             - If documentation was supplied, it outranks your own recollection wherever the two \
             disagree, and say so in uncertainties.
+            - If the supplied documentation is an OpenAPI/Swagger document or a Postman \
+            collection, it is AUTHORITATIVE. Transcribe what it declares — paths, methods, \
+            schemas, field names, status codes — rather than recalling the product. Report \
+            confidence HIGH, and ask about nothing the document already answers.
             - If no documentation was supplied, you are working from memory. Say what you are \
             unsure of and set confidence honestly. An overconfident guess costs the user more \
             than an admission.

@@ -125,7 +125,7 @@ batch, and it must check quota *before* the insert, not after.
 | Clarifications | ✅ the system asks rather than guesses, and stops until answered (ADR-0011) |
 | Wait time | ✅ seconds and a sentence, and honestly nothing while waiting on the user |
 | Chat | ❌ threads, messages, and a tool surface that can only touch the project in scope |
-| REVISE | ❌ "make five customers' cards blocked" applied to an existing sandbox |
+| REVISE | ✅ "make five customers' cards blocked" applied to an existing sandbox — a validated plan, not tool calls |
 
 **3.1–3.3 and the chaining half of 3.4 are done. 3.1 was the risky half of the spending;
 the tool surface is the risky half of what remains.** The spending machinery exists, is enforced, and is proved by tests that need no API key —

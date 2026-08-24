@@ -35,7 +35,11 @@ class GenerationController {
 
     /**
      * @param docs              documentation is <strong>recommended, never required</strong>
-     *                          (ADR-0010). Supplying it produces a noticeably better sandbox
+     *                          (ADR-0010). Supplying it produces a noticeably better sandbox.
+     *                          An OpenAPI/Swagger document or a Postman collection pasted here
+     *                          is treated as authoritative and transcribed rather than recalled,
+     *                          which is the most accurate input available today. Nothing is
+     *                          fetched — paste the document, do not link it
      * @param agentResearchOnly required when no docs are given, and it is a deliberate
      *                          friction: without it, "I did not paste anything" and "research
      *                          it for me" would be the same request, and every caller would
