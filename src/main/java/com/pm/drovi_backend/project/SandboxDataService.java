@@ -35,6 +35,7 @@ public class SandboxDataService {
     private final SandboxRecordRepository records;
     private final RecordWriter recordWriter;
     private final ProjectService projects;
+    private final tools.jackson.databind.ObjectMapper mapper;
 
     // --- collections ---------------------------------------------------------
 
@@ -168,6 +169,23 @@ public class SandboxDataService {
         }
         record.replaceData(merged);
         return record;
+    }
+
+    /**
+     * Records whose data contains every field of {@code match} — the same indexed {@code jsonb}
+     * containment the sandbox's own LIST uses, rather than a second matching implementation
+     * that could disagree with it.
+     *
+     * <p>Always bounded. An unbounded match is how "change the blocked ones" turns into a
+     * transaction holding every row in the project.
+     */
+    @Transactional(readOnly = true)
+    public List<SandboxRecord> findMatching(UUID accountId, UUID projectId, UUID collectionId,
+                                            Map<String, Object> match, int limit) {
+        SandboxCollection collection = requireCollection(accountId, projectId, collectionId);
+        String filter = mapper.writeValueAsString(match == null ? Map.of() : match);
+        return records.findFiltered(projectId, collection.getId(), filter,
+                Math.clamp(limit, 1, MAX_BULK_RECORDS), 0);
     }
 
     @Transactional

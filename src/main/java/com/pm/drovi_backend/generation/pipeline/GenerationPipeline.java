@@ -109,8 +109,16 @@ public class GenerationPipeline implements JobChain, ClarificationResumer {
                 yield List.of();
             }
 
-            // REVISE edits a sandbox that already exists. Nothing follows it.
-            case REVISE -> List.of();
+            // A revision that asked a question changed nothing, so what follows it is ITSELF —
+            // the same instruction, re-run once the answers exist. Every other step's questions
+            // are about how to proceed; a revision's are about what to do, so there is nothing
+            // to proceed to.
+            case REVISE -> Boolean.TRUE.equals(result.get("deferred"))
+                    ? List.of(new NewJob(JobKind.REVISE,
+                            String.valueOf(result.getOrDefault("instruction", job.prompt())),
+                            Map.of("instruction", result.getOrDefault("instruction", job.prompt()),
+                                    "clarifications", answersFor(job.projectId()))))
+                    : List.of();
         };
     }
 

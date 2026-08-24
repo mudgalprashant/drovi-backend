@@ -94,6 +94,29 @@ public class GenerationService {
     }
 
     /**
+     * Change a sandbox that already exists.
+     *
+     * <p>Unlike a generation this does <strong>not</strong> touch the project's status. The
+     * sandbox keeps serving while the revision runs — the change lands in one transaction, so a
+     * caller sees before or after and never half of one, and taking a working sandbox offline
+     * to adjust five records would be a poor trade.
+     */
+    @Transactional
+    public GenerationJob revise(UUID accountId, UUID projectId, String instruction) {
+        projects.require(accountId, projectId);
+        requireNothingAlreadyRunning(projectId);
+        if (spec.listEndpoints(accountId, projectId).isEmpty()) {
+            throw new DroviException(ErrorCode.CONFLICT,
+                    "This sandbox has nothing to change yet. Generate it first.");
+        }
+
+        GenerationJob job = jobs.enqueue(accountId, projectId, null, JobKind.REVISE,
+                instruction, Map.of("instruction", instruction));
+        log.info("revision.started jobId={} projectId={}", job.id(), projectId);
+        return job;
+    }
+
+    /**
      * SPEC refuses a non-empty project too, and that check is the real one. This is here for
      * cost: without it a user learns their project is already built only after RESEARCH has
      * been paid for.
@@ -115,7 +138,7 @@ public class GenerationService {
                                 WHERE project_id = ? AND status IN ('QUEUED','RUNNING'))
                 """, Boolean.class, projectId)) {
             throw new DroviException(ErrorCode.CONFLICT,
-                    "A generation is already running for this project.");
+                    "Something is already running for this project. Wait for it to finish.");
         }
     }
 
