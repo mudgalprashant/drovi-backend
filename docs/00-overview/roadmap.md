@@ -124,7 +124,8 @@ batch, and it must check quota *before* the insert, not after.
 | Chaining | ✅ RESEARCH → SPEC → one SEED per collection → `READY`, plus the HTTP surface to start one |
 | Clarifications | ✅ the system asks rather than guesses, and stops until answered (ADR-0011) |
 | Wait time | ✅ seconds and a sentence, and honestly nothing while waiting on the user |
-| Chat | ❌ threads, messages, and a tool surface that can only touch the project in scope |
+| Chat | ✅ threads and messages; the same sentence builds or revises depending on the project |
+| Spec import | ✅ a pasted OpenAPI or Postman document is read directly — no research, no spec model call |
 | REVISE | ✅ "make five customers' cards blocked" applied to an existing sandbox — a validated plan, not tool calls |
 
 **3.1–3.3 and the chaining half of 3.4 are done. 3.1 was the risky half of the spending;
@@ -151,8 +152,13 @@ and seed data, and its base URL serves them.
 criterion as an executable test: it starts at an HTTP POST and finishes by calling the sandbox
 over HTTP, with no SQL in between.
 
-**What is left in Phase 3 is chat**, and the piece that has been called out since Phase 0 as
-the risky one: a tool surface the model can call.
+**Phase 3 is complete.** The piece called out since Phase 0 as the risky one — a tool surface
+the model can call — was met by *not having one*: a model's write is a plan the platform
+validates and applies (#51).
+
+The one thing named in the product goal and deliberately not built is **taking an existing
+sandbox's URL as an input**. It requires fetching, which ADR-0010 rules out; that is a decision,
+not a missing function.
 
 **The two risks that matter here**, both called out in the security docs:
 

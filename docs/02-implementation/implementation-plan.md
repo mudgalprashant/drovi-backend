@@ -379,14 +379,46 @@ status the way a generation does.
 Ambiguity reuses the clarification loop. A deferred revision changed nothing, so answering
 re-runs *the revision itself* rather than moving to a successor.
 
-#### Chat and the tool surface ❌
+#### Spec import — reading a document instead of researching it ✅
 
-Threads, messages, and tools the model may call. **Scope the tools structurally:**
+A recognised OpenAPI or Postman document skips RESEARCH **and** the SPEC model call. The test
+asserts this by making the stub provider *throw* on those purposes: the claim is not "the import
+worked" but "nothing was spent working out what the document already said".
 
-INVARIANT: a tool call cannot touch a plan, a quota, an `app_config` row, a provider
-credential, or any project other than the one in scope. The tool signatures must make
-those unreachable — do not rely on a prompt saying so. Researched text is data, never
-instructions.
+Paths and methods become routes verbatim; the **last** path parameter names the record (real
+specs nest, and inference only handles one); component schemas become the record shape; security
+schemes become the auth mode; Postman folders become API groups.
+
+JSON only, and no fetching — both stated in `docs/03-api/console-api.md`.
+
+An imported plan gets the **same validation** as a generated one. A specification can describe a
+route the runtime cannot serve just as easily as a model can invent one.
+
+⚠️ Route on *"will reading this produce a sandbox"*, not *"does this look like a spec"*. Those
+differ — an OpenAPI file with an empty `paths` object is unmistakably OpenAPI and describes
+nothing — and conflating them failed a user's generation instead of falling back.
+
+#### Chat ✅
+
+`chat_thread` / `chat_message`, and `ChatNarrator`.
+
+The behaviour that matters: **the same sentence does the right thing.** Empty project → generate.
+Built project → revise. The reply carries the wait time.
+
+Narration covers only the moments a person cares about — a question, ready, revised, failed. A
+generation is five or six jobs and most are plumbing. It is best-effort: a transcript must never
+fail the generation it describes, and a project with no thread gets none.
+
+`seq` orders a thread, not `createdAt`. Appends take the thread's row lock, because two racing
+appends compute the same `max + 1` and one loses on the unique index.
+
+#### The tool surface — met without one ✅
+
+INVARIANT: a model must be unable to touch a plan, a quota, an `app_config` row, a provider
+credential, or any project other than the one in scope — structurally, not by prompt.
+
+**REVISE satisfies this by not having a tool surface.** See ADR-0011's neighbour, decision #51,
+and `RevisePlan`. Keep that shape if chat is ever given the ability to act directly.
 
 **Phase exit:** one sentence produces a `READY` project whose base URL serves generated
 endpoints from generated data.

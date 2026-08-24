@@ -79,6 +79,7 @@ class SpecHandler implements JobHandler {
     private final AiGateway ai;
     private final JobStore jobs;
     private final SpecWriter writer;
+    private final SpecImporter importer;
     private final AccountService accounts;
     private final EntitlementService entitlements;
     private final ObjectMapper mapper;
@@ -91,10 +92,24 @@ class SpecHandler implements JobHandler {
     @Override
     public Map<String, Object> handle(GenerationJob job) {
         UUID projectId = requireProject(job);
+
+        // A supplied specification IS the answer. Asking a model to restate it would cost money
+        // to produce something less accurate than the document already in hand.
+        if (job.input().get("spec") instanceof String document && !document.isBlank()) {
+            SpecPlan imported = importer.parse(document)
+                    .orElseThrow(() -> new TerminalJobException("SPEC_UNREADABLE",
+                            "We could not read that specification. Try describing the product instead."));
+            requireWithinPlanLimit(imported, endpointLimitFor(job));
+            Map<String, Object> written = new java.util.HashMap<>(
+                    writer.write(job.accountId(), projectId, imported));
+            written.put("importedFrom", job.input().getOrDefault("specFormat", "SPEC"));
+            log.info("spec.imported jobId={} projectId={} endpoints={}",
+                    job.id(), projectId, imported.endpoints().size());
+            return Map.copyOf(written);
+        }
+
         Map<String, Object> findings = requireFindings(job);
-        int maxEndpoints = entitlements
-                .forPlan(accounts.require(job.accountId()).getPlanCode())
-                .maxEndpointsPerProject();
+        int maxEndpoints = endpointLimitFor(job);
 
         AiResponse response = ai.call(job.callContext(),
                 AiRequest.structured(AiPurpose.SPEC, SYSTEM_INSTRUCTION,
@@ -107,6 +122,11 @@ class SpecHandler implements JobHandler {
         log.info("spec.completed jobId={} projectId={} endpoints={}",
                 job.id(), projectId, plan.endpoints().size());
         return written;
+    }
+
+    private int endpointLimitFor(GenerationJob job) {
+        return entitlements.forPlan(accounts.require(job.accountId()).getPlanCode())
+                .maxEndpointsPerProject();
     }
 
     /**
