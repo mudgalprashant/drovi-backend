@@ -1,5 +1,6 @@
 package com.pm.drovi_backend.generation.pipeline;
 
+import com.pm.drovi_backend.chat.ChatNarrator;
 import com.pm.drovi_backend.generation.GenerationJob;
 import com.pm.drovi_backend.generation.JobChain;
 import com.pm.drovi_backend.generation.JobKind;
@@ -52,6 +53,7 @@ public class GenerationPipeline implements JobChain, ClarificationResumer {
      * answering one — which is what needs the resume — is not.
      */
     private final ClarificationStore clarifications;
+    private final ChatNarrator narrator;
 
     /**
      * A step's successors, unless it raised doubts — in which case the chain <strong>stops and
@@ -63,8 +65,12 @@ public class GenerationPipeline implements JobChain, ClarificationResumer {
      */
     @Override
     public List<NewJob> after(GenerationJob job, Map<String, Object> result) {
-        if (raiseAll(job, RaisedQuestion.from(result.get("questions"))) > 0) {
+        List<RaisedQuestion> questions = RaisedQuestion.from(result.get("questions"));
+        if (raiseAll(job, questions) > 0) {
             log.info("pipeline.waiting.for.user jobId={} projectId={}", job.id(), job.projectId());
+            // Only the first is narrated. A conversation that asks four things at once gets none
+            // of them answered; the rest are waiting in /clarifications either way.
+            narrator.asked(job.projectId(), questions.getFirst().question());
             return List.of();
         }
         return successorsOf(job, result);
@@ -113,7 +119,7 @@ public class GenerationPipeline implements JobChain, ClarificationResumer {
             // the same instruction, re-run once the answers exist. Every other step's questions
             // are about how to proceed; a revision's are about what to do, so there is nothing
             // to proceed to.
-            case REVISE -> Boolean.TRUE.equals(result.get("deferred"))
+            case REVISE -> narrateRevision(job, result)
                     ? List.of(new NewJob(JobKind.REVISE,
                             String.valueOf(result.getOrDefault("instruction", job.prompt())),
                             Map.of("instruction", result.getOrDefault("instruction", job.prompt()),
@@ -130,6 +136,7 @@ public class GenerationPipeline implements JobChain, ClarificationResumer {
         // A generation that stopped must leave a project that SAYS it failed. A project that
         // simply never becomes ready is indistinguishable from one still working, forever.
         projects.markGenerationFailed(job.accountId(), job.projectId());
+        narrator.failed(job.projectId(), "You can try describing it differently, or supply its docs.");
         log.info("pipeline.failed jobId={} kind={} projectId={} errorCode={}",
                 job.id(), job.kind(), job.projectId(), errorCode);
     }
@@ -150,6 +157,18 @@ public class GenerationPipeline implements JobChain, ClarificationResumer {
                 "Generate example " + code,
                 Map.of("collectionId", String.valueOf(id)))));
         return seeds;
+    }
+
+    /**
+     * A revision that applied says so; one that deferred has already narrated its question, and
+     * saying "waiting on you" twice in a row reads as a stutter.
+     */
+    private boolean narrateRevision(GenerationJob job, Map<String, Object> result) {
+        boolean deferred = Boolean.TRUE.equals(result.get("deferred"));
+        if (!deferred) {
+            narrator.revised(job.projectId(), String.valueOf(result.get("summary")));
+        }
+        return deferred;
     }
 
     /** @return how many doubts are now open. Zero means the chain carries on. */
@@ -177,6 +196,7 @@ public class GenerationPipeline implements JobChain, ClarificationResumer {
             return;
         }
         projects.markReady(job.accountId(), job.projectId());
+        narrator.ready(job.projectId());
         log.info("pipeline.completed projectId={}", job.projectId());
     }
 }
