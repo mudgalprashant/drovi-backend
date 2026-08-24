@@ -30,7 +30,7 @@ Base `/api/v1`. JSON. Firebase ID tokens. URLs lowercase, plural, hyphenated; JS
 | Generations | `POST/GET /projects/{id}/generations`, `GET …/progress` | ✅ |
 | Clarifications | `GET /projects/{id}/clarifications`, `POST …/{cid}/answer`, `POST …/{cid}/assume` | ✅ |
 | Revisions | `POST /projects/{id}/revisions` | ✅ |
-| Chat | threads, messages | ❌ Phase 3.4 |
+| Chat | `POST /projects/{id}/threads`, `GET/POST /threads/{id}/messages`, `GET /threads` | ✅ |
 
 **Phase 2 is complete: a whole working sandbox can be built without touching SQL.**
 **Phase 3 adds the other way to build one: describe it.**
@@ -45,10 +45,22 @@ generation takes minutes, so the request enqueues a chain and returns; the conso
 {"product": "Stripe's card API", "docs": "…", "docsUrl": "…", "agentResearchOnly": true}
 ```
 
-`docs` is **recommended, never required** (ADR-0010). An **OpenAPI/Swagger document or a
-Postman collection pasted into `docs`** is treated as authoritative and transcribed rather than
-recalled — the most accurate input available today. Nothing is fetched: paste the document,
-do not link it. With neither `docs` nor
+`docs` is **recommended, never required** (ADR-0010).
+
+**An OpenAPI/Swagger document or a Postman collection pasted into `docs` is read directly.**
+Research is skipped entirely, and so is the spec model call — the specification *is* the API, and
+asking a model to restate it would cost money to produce something less accurate. What remains is
+seeding, which still needs a model because a spec says what a field is, not what a plausible value
+looks like.
+
+| | |
+| --- | --- |
+| Read | OpenAPI 3.x, Swagger 2.0, Postman collection v2 — **JSON only** |
+| Not read | YAML. It needs another dependency, and a parser that mangles anchors would be worse than falling back |
+| Not followed | a `$ref` to a URL or another file. Local `#/components/schemas/…` refs *are* resolved — they are in the document you pasted |
+
+Anything unrecognised, or a document that yields no usable routes, falls back to the normal
+research path and costs nothing extra. Nothing is fetched: paste the document, do not link it. With neither `docs` nor
 `agentResearchOnly`, the job fails asking for one — absent and *declined* are different
 requests, and collapsing them would hand every caller the least accurate path.
 
@@ -78,6 +90,25 @@ gets more truthful as the generation proceeds.
 
 When `waitingForYou` is true there is **no estimate at all**. The clock is not running, and a
 countdown to nothing is worse than nothing.
+
+### Chat — the front door
+
+**`POST /threads/{id}/messages`** takes `{"message": "…"}` and returns **202** with the
+assistant's *acknowledgement*, not the result.
+
+The same sentence does different things depending on the project: against an empty one it starts
+a generation, against a built one it revises the data. Making a user pick the right endpoint for
+their sentence would be asking them to know something about the pipeline.
+
+The reply carries the wait time. The transcript then fills in on its own at the few moments a
+person cares about — a question was raised, the sandbox is ready (with its base URL), a revision
+applied, or it failed. The rest of a generation's five or six steps stay in
+`GET …/generations`, where a progress log belongs.
+
+Messages are ordered by **`seq`, not `createdAt`** — a question and the answer to it can land in
+the same millisecond.
+
+A project driven through the REST routes has no thread and simply gets no narration.
 
 ### Revisions — changing a sandbox that exists
 

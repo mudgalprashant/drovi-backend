@@ -65,10 +65,11 @@ Full rules: [docs/02-implementation/branching-and-workflow.md](docs/02-implement
 | Chaining, and the HTTP surface | ✅ describe a product, get a `READY` sandbox that serves data (Phase 3.4) |
 | Clarifications | ✅ ambiguity stops the build and asks, rather than guessing (ADR-0011) |
 | Revisions | ✅ change a live sandbox in words — a validated plan the platform applies, never tool calls |
-| Chat | ❌ threads and messages — the rest of Phase 3.4 |
+| Chat | ✅ one place to say what you want — it builds or revises depending on the sandbox |
+| Spec import | ✅ paste an OpenAPI or Postman document and it is read directly, not researched |
 | Console (web app) | ❌ not started |
 
-218 tests green against a real embedded Postgres.
+240 tests green against a real embedded Postgres.
 
 The runtime is real: seed a project and it serves. What it cannot yet do is
 *generate* one from a chat message — that is the next slice, and it is the one
