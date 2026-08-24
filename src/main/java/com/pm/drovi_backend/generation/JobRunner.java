@@ -56,6 +56,7 @@ public class JobRunner {
     private final JobStore jobs;
     private final AppConfigService config;
     private final ObjectMapper mapper;
+    private final JobChain chain;
     private final Map<JobKind, JobHandler> handlers = new EnumMap<>(JobKind.class);
 
     /**
@@ -65,10 +66,12 @@ public class JobRunner {
      */
     private volatile Instant pausedUntil = Instant.EPOCH;
 
-    public JobRunner(JobStore jobs, AppConfigService config, ObjectMapper mapper, List<JobHandler> handlers) {
+    public JobRunner(JobStore jobs, AppConfigService config, ObjectMapper mapper,
+                     JobChain chain, List<JobHandler> handlers) {
         this.jobs = jobs;
         this.config = config;
         this.mapper = mapper;
+        this.chain = chain;
         for (JobHandler handler : handlers) {
             JobHandler clash = this.handlers.put(handler.kind(), handler);
             if (clash != null) {
@@ -148,7 +151,10 @@ public class JobRunner {
         log.info("job.started jobId={} kind={} attempt={}", job.id(), job.kind(), job.attempt());
         try {
             Map<String, Object> result = handler.handle(job);
-            jobs.succeed(job.id(), mapper.writeValueAsString(result == null ? Map.of() : result));
+            Map<String, Object> outcome = result == null ? Map.of() : result;
+            // Decided before the write and applied inside it, so this job's success and its
+            // successors land together or not at all.
+            jobs.succeed(job.id(), mapper.writeValueAsString(outcome), chain.after(job, outcome));
 
         } catch (AiCappedException e) {
             // A control fired. The job is fine; the platform is not currently willing to spend,
@@ -168,7 +174,7 @@ public class JobRunner {
             // REFUSED is the one provider failure that is terminal: asking again spends money
             // to be told no a second time. ERROR and TIMEOUT are worth another attempt.
             if (e.getStatus() == AiCallStatus.REFUSED) {
-                jobs.fail(job.id(), "MODEL_REFUSED",
+                fail(job, "MODEL_REFUSED",
                         "The model declined to generate this. Try describing the product differently.");
             } else {
                 retryOrFail(job, "PROVIDER_ERROR", "The model call did not complete.");
@@ -189,12 +195,12 @@ public class JobRunner {
                 retryOrFail(job, ErrorCode.INTERNAL.code(), "Something went wrong while generating this.");
             } else {
                 log.info("job.refused jobId={} errorCode={}", job.id(), e.getErrorCode().code());
-                jobs.fail(job.id(), e.getErrorCode().code(), e.getMessage());
+                fail(job, e.getErrorCode().code(), e.getMessage());
             }
 
         } catch (TerminalJobException e) {
             log.warn("job.terminal jobId={} errorCode={} detail={}", job.id(), e.getErrorCode(), e.getMessage());
-            jobs.fail(job.id(), e.getErrorCode(), e.getMessage());
+            fail(job, e.getErrorCode(), e.getMessage());
 
         } catch (RetryableJobException e) {
             log.info("job.retryable jobId={} attempt={} detail={}", job.id(), job.attempt(), e.getMessage());
@@ -216,9 +222,26 @@ public class JobRunner {
     private void retryOrFail(GenerationJob job, String errorCode, String message) {
         int maxAttempts = config.getInt("ai.max.attempts", MAX_ATTEMPTS_DEFAULT);
         if (job.attempt() >= maxAttempts) {
-            jobs.fail(job.id(), errorCode, message);
+            fail(job, errorCode, message);
         } else {
             jobs.requeue(job.id(), errorCode, message);
+        }
+    }
+
+    /**
+     * Every terminal failure goes through here, so the chain hears about all of them. A
+     * generation that stops must leave a project that says it failed — a project that simply
+     * never becomes ready looks like one that is still working, forever.
+     *
+     * <p>The chain's own failure must not turn a recorded failure into an unrecorded one, so it
+     * is logged and swallowed.
+     */
+    private void fail(GenerationJob job, String errorCode, String message) {
+        jobs.fail(job.id(), errorCode, message);
+        try {
+            chain.afterFailure(job, errorCode);
+        } catch (RuntimeException e) {
+            log.error("job.chain.afterFailure.failed jobId={}", job.id(), e);
         }
     }
 

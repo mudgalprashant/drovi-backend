@@ -1,0 +1,31 @@
+-- =============================================================================
+-- The sandbox is addressed by the PROJECT ID.
+--
+--   before:  /s/{project_key}/v1/cards      (a separate 192-bit random token)
+--   after:   /s/{project_id}/v1/cards       (the project's own uuid)
+--
+-- WHY: one identifier for one thing. A user reading their project's URL in the
+-- console and the base URL they paste into their code should not have to hold
+-- two unrelated strings in their head, and support conversations that say "the
+-- project with id X" should be about the same X they can see.
+--
+-- IS THIS WEAKER? No, and it is worth being precise about why, because it looks
+-- like it might be. project_key was 24 random bytes; a uuid from
+-- gen_random_uuid() is v4, so 122 random bits. Both are far past guessing, and
+-- the sandbox's real protection is sandbox_project.auth_mode -- which generation
+-- sets from the imitated product, precisely so a replica exercises the caller's
+-- own auth path (decision #40).
+--
+-- WHAT DOES CHANGE: the project id now appears in two places instead of one. A
+-- screenshot of a console URL, or a project id pasted into a support thread, is
+-- now also the sandbox's address. With auth_mode BEARER -- the generated default
+-- -- that discloses nothing usable. With auth_mode NONE it is the whole
+-- protection, which is the same as it always was for project_key, but the id is
+-- easier to leak by accident. Recorded in the security context.
+--
+-- The column goes rather than lingering as an unused unique random string that
+-- the next reader has to work out the purpose of.
+-- =============================================================================
+
+DROP INDEX IF EXISTS sandbox_project_key_uk;
+ALTER TABLE sandbox_project DROP COLUMN IF EXISTS project_key;

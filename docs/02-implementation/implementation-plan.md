@@ -313,7 +313,73 @@ the obvious mechanical check — rejecting Luhn-valid card numbers — would rej
 values a faithful Stripe mock *should* contain. The prompt names the published test-value
 convention instead.
 
-### 3.4 Chat and the tool surface
+### 3.4 Chaining, chat, and the tool surface
+
+#### Chaining ✅
+
+RESEARCH → SPEC → one SEED per collection → the project is `READY`. In `GenerationPipeline`,
+the only class that knows the order — the runner stays generic.
+
+| Decision | Reason |
+| --- | --- |
+| a job's success and its successors write in **one transaction** | split, the chain breaks both ways: a successor against a predecessor never marked succeeded, or a success with nothing following and a generation that stops silently |
+| `JobChain.after` is a **calculation**, not a write | which is what makes the above possible |
+| SEED fans out **one job per collection** | not parallelism — the runner still takes one job per tick. It paces the calls against 15/minute, and a collection that will not generate retries alone |
+| the last step asks **"is anything else outstanding?"** | it cannot know it is last. Counting expected steps would need the count to survive a retry, a requeue and a failure |
+| `GENERATING` stops the sandbox serving | routes and data appear together, not one endpoint at a time |
+| a terminal failure marks the project `FAILED` | a project that merely never becomes ready is indistinguishable from one still working, forever |
+
+**HTTP:** `POST /api/v1/projects/{id}/generations` (202) and `GET` for the history. See
+`docs/03-api/console-api.md`.
+
+**Phase exit criterion, as a test:**
+`GenerationPipelineTest.oneSentence_producesAReadySandboxThatServesGeneratedData` — starts at
+an HTTP POST, ends by calling the sandbox over HTTP, no SQL in between and no API key anywhere.
+
+#### Clarifications — asking rather than guessing ✅
+
+**ADR-0011.** A step that is unsure raises questions and the chain *stops*. Doubts are rows,
+kept forever; "you decide" is a first-class answer whose decision is recorded; answers ride
+forward so the same thing is not asked twice.
+
+Resuming works out where it paused by asking the database — the most recent succeeded job is,
+by definition, the one whose successors were never enqueued.
+
+⚠️ The pipeline depends on `ClarificationStore`, **not** `ClarificationService`. The service
+resumes the pipeline, so the other direction is a constructor cycle.
+
+#### Telling the user how long ✅
+
+`GET …/generations/progress` returns seconds and a sentence. Configured, not measured — there
+are no real timings yet. Assumed seed steps before the spec, counted after it. **No estimate at
+all while waiting on the user**, because the clock is not running.
+
+#### REVISE — changing an existing sandbox ✅
+
+The end goal's headline example, and the step where a model's output acts on a user's data.
+
+**The model produces a PLAN; the platform applies it.** `RevisePlan` can name a collection by
+its *code* and nothing else — no project id, no account id, no table name, no SQL. `ReviseWriter`
+resolves each code against the caller's own project, so a plan cannot express a write to another
+tenant, a plan, a quota or `app_config`. **Unreachable, not forbidden.**
+
+That is deliberately not a tool-calling loop. A tool loop can be talked into a call it should not
+make; a plan can only say what the type can hold.
+
+| Refusal | Reason |
+| --- | --- |
+| `UPDATE`/`DELETE` naming no records | "change the cards" must not mean all of them by omission |
+| an oversized change | **refused, not clamped** — a partial application the user can only discover by counting |
+| a match selecting more than the ceiling | the same failure by another route: fetch `limit + 1` and refuse |
+| an unknown collection | fails the whole plan, so a valid change beside an invalid one does not survive |
+
+Applied in one transaction. **The sandbox keeps serving** — a revision does not change project
+status the way a generation does.
+
+Ambiguity reuses the clarification loop. A deferred revision changed nothing, so answering
+re-runs *the revision itself* rather than moving to a successor.
+
+#### Chat and the tool surface ❌
 
 Threads, messages, and tools the model may call. **Scope the tools structurally:**
 

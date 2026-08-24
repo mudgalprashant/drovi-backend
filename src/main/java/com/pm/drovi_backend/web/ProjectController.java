@@ -57,7 +57,6 @@ class ProjectController {
     // --- responses -----------------------------------------------------------
 
     record ProjectResponse(String id,
-                           String projectKey,
                            String baseUrl,
                            String name,
                            String sourceProduct,
@@ -169,10 +168,11 @@ class ProjectController {
     private ProjectResponse toResponse(SandboxProject project) {
         return new ProjectResponse(
                 project.getId().toString(),
-                project.getProjectKey(),
                 // The artifact the user actually came for: paste this over the production
-                // base URL and nothing else in their code changes.
-                properties.baseUrlFor(project.getProjectKey()),
+                // base URL and nothing else in their code changes. It is built from the
+                // project's own id, so the thing they see in the console and the thing they
+                // paste into their code are the same identifier.
+                properties.baseUrlFor(project.getId()),
                 project.getName(),
                 project.getSourceProduct(),
                 project.getSourceDocsUrl(),

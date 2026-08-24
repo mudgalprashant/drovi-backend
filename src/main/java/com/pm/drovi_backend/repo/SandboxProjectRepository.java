@@ -9,7 +9,6 @@ import java.util.UUID;
 
 public interface SandboxProjectRepository extends JpaRepository<SandboxProject, UUID> {
 
-    Optional<SandboxProject> findByProjectKey(String projectKey);
 
     /**
      * The console's only lookup. Scoping by account in the query — rather than loading by
@@ -23,5 +22,4 @@ public interface SandboxProjectRepository extends JpaRepository<SandboxProject, 
     /** Archived projects do not count against the plan; they no longer serve. */
     long countByAccountIdAndArchivedAtIsNull(UUID accountId);
 
-    boolean existsByProjectKey(String projectKey);
 }

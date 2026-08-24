@@ -64,7 +64,7 @@ class EndpointsAndRulesTest extends PostgresTestBase {
         String owner = user();
         String project = createProject(owner, "Cards");
         openSandbox(owner, project);
-        String key = projectKey(owner, project);
+        String key = sandboxAddress(owner, project);
         String collection = createCollection(owner, project, "cards");
 
         seed(owner, project, collection, """
@@ -101,7 +101,7 @@ class EndpointsAndRulesTest extends PostgresTestBase {
         String owner = user();
         String project = createProject(owner, "Cards");
         openSandbox(owner, project);
-        String key = projectKey(owner, project);
+        String key = sandboxAddress(owner, project);
         String collection = createCollection(owner, project, "cards");
         seed(owner, project, collection, "{\"record\":{\"id\":\"card_9\",\"status\":\"ACTIVE\"}}");
         String endpoint = createEndpoint(owner, project, """
@@ -128,7 +128,7 @@ class EndpointsAndRulesTest extends PostgresTestBase {
         String owner = user();
         String project = createProject(owner, "Cards");
         openSandbox(owner, project);
-        String key = projectKey(owner, project);
+        String key = sandboxAddress(owner, project);
         String collection = createCollection(owner, project, "cards");
         seed(owner, project, collection, "{\"record\":{\"id\":\"card_9\",\"status\":\"ACTIVE\"}}");
         String endpoint = createEndpoint(owner, project, """
@@ -153,7 +153,7 @@ class EndpointsAndRulesTest extends PostgresTestBase {
         String owner = user();
         String project = createProject(owner, "Cards");
         openSandbox(owner, project);
-        String key = projectKey(owner, project);
+        String key = sandboxAddress(owner, project);
         String collection = createCollection(owner, project, "cards");
         seed(owner, project, collection, "{\"record\":{\"id\":\"c1\",\"status\":\"ACTIVE\"}}");
         String endpoint = createEndpoint(owner, project, """
@@ -183,7 +183,7 @@ class EndpointsAndRulesTest extends PostgresTestBase {
         String owner = user();
         String project = createProject(owner, "Cards");
         openSandbox(owner, project);
-        String key = projectKey(owner, project);
+        String key = sandboxAddress(owner, project);
         String collection = createCollection(owner, project, "cards");
         seed(owner, project, collection, "{\"record\":{\"id\":\"c1\"}}");
         String endpoint = createEndpoint(owner, project, """
@@ -208,7 +208,7 @@ class EndpointsAndRulesTest extends PostgresTestBase {
         String owner = user();
         String project = createProject(owner, "Cards");
         openSandbox(owner, project);
-        String key = projectKey(owner, project);
+        String key = sandboxAddress(owner, project);
         String collection = createCollection(owner, project, "cards");
         seed(owner, project, collection, "{\"record\":{\"id\":\"blocked\"}}");
 
@@ -322,7 +322,7 @@ class EndpointsAndRulesTest extends PostgresTestBase {
         String owner = user();
         String project = createProject(owner, "Cards");
         openSandbox(owner, project);
-        String key = projectKey(owner, project);
+        String key = sandboxAddress(owner, project);
         createEndpoint(owner, project,
                 "{\"method\":\"GET\",\"pathTemplate\":\"/v1/ping\",\"behavior\":\"STATIC\"," +
                         "\"responseTemplate\":{\"ok\":true}}");
@@ -350,7 +350,7 @@ class EndpointsAndRulesTest extends PostgresTestBase {
         String owner = user();
         String project = createProject(owner, "Cards");
         openSandbox(owner, project);
-        String key = projectKey(owner, project);
+        String key = sandboxAddress(owner, project);
         for (int i = 0; i < 5; i++) {
             mvc.perform(get("/s/" + key + "/v1/call" + i));
         }
@@ -401,10 +401,9 @@ class EndpointsAndRulesTest extends PostgresTestBase {
                 .andExpect(status().isOk());
     }
 
-    private String projectKey(String uid, String projectId) throws Exception {
-        return mapper.readTree(mvc.perform(get("/api/v1/projects/" + projectId)
-                        .header("Authorization", "Bearer " + uid))
-                .andReturn().getResponse().getContentAsString()).get("projectKey").asString();
+    /** The sandbox address is the project's own id — there is no separate key any more. */
+    private String sandboxAddress(String uid, String projectId) {
+        return projectId;
     }
 
     private String createCollection(String uid, String projectId, String code) throws Exception {

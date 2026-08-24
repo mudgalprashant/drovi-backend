@@ -28,7 +28,7 @@ class MockRequestLogger {
     private final AppConfigService config;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    void record(String projectKey, MockRequest request, MockResponse response,
+    void record(UUID projectId, MockRequest request, MockResponse response,
                 int latencyMs, String clientPrefix) {
         if (!config.getBoolean("runtime.log.enabled", true)) {
             return;
@@ -40,13 +40,13 @@ class MockRequestLogger {
                         (project_id, endpoint_id, rule_id, method, path, query, status_code,
                          latency_ms, client_ip_prefix, error_code)
                     SELECT sp.id, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                      FROM sandbox_project sp WHERE sp.project_key = ?
+                      FROM sandbox_project sp WHERE sp.id = ?
                     """,
                     endpointId, response.matchedRuleId(), request.method(), request.path(),
                     request.query().isEmpty() ? null : request.query().toString(),
-                    response.status(), latencyMs, clientPrefix, response.errorCode(), projectKey);
+                    response.status(), latencyMs, clientPrefix, response.errorCode(), projectId);
         } catch (RuntimeException e) {
-            log.warn("runtime.log.failed projectKey={} status={}", projectKey, response.status(), e);
+            log.warn("runtime.log.failed projectId={} status={}", projectId, response.status(), e);
         }
     }
 }

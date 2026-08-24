@@ -27,9 +27,107 @@ Base `/api/v1`. JSON. Firebase ID tokens. URLs lowercase, plural, hyphenated; JS
 | Endpoints | `GET/POST /projects/{id}/endpoints`, `GET/PATCH/DELETE .../{endpointId}` | ✅ |
 | Rules | `GET/POST .../endpoints/{eid}/rules`, `PATCH/DELETE /projects/{id}/rules/{ruleId}` | ✅ |
 | Inspector | `GET /projects/{id}/requests` — keyset paged | ✅ |
-| Chat | threads, messages, generation status | ❌ Phase 3 |
+| Generations | `POST/GET /projects/{id}/generations`, `GET …/progress` | ✅ |
+| Clarifications | `GET /projects/{id}/clarifications`, `POST …/{cid}/answer`, `POST …/{cid}/assume` | ✅ |
+| Revisions | `POST /projects/{id}/revisions` | ✅ |
+| Chat | threads, messages | ❌ Phase 3.4 |
 
 **Phase 2 is complete: a whole working sandbox can be built without touching SQL.**
+**Phase 3 adds the other way to build one: describe it.**
+
+### Generations
+
+**`POST /projects/{id}/generations`** returns **202**, not 201 — nothing is built yet. A
+generation takes minutes, so the request enqueues a chain and returns; the console polls
+`GET` below, and the *project's own status* is what says whether the sandbox is worth calling.
+
+```json
+{"product": "Stripe's card API", "docs": "…", "docsUrl": "…", "agentResearchOnly": true}
+```
+
+`docs` is **recommended, never required** (ADR-0010). An **OpenAPI/Swagger document or a
+Postman collection pasted into `docs`** is treated as authoritative and transcribed rather than
+recalled — the most accurate input available today. Nothing is fetched: paste the document,
+do not link it. With neither `docs` nor
+`agentResearchOnly`, the job fails asking for one — absent and *declined* are different
+requests, and collapsing them would hand every caller the least accurate path.
+
+Refused with **409** if a generation is already running for the project, or if the project
+already has endpoints. The second is also checked by SPEC, but only after research has been
+paid for; failing at the HTTP call is the difference between a clear 409 and a surprise on the
+bill.
+
+While the chain runs the project is `GENERATING` and **the sandbox does not serve** — routes
+and data appear together rather than one endpoint at a time. It ends `READY`, or `FAILED` if a
+step gave up.
+
+**`GET /projects/{id}/generations`** is the history: one row per step, newest first, with
+`attempt`, `errorCode` and a message that is always ours and never the provider's.
+
+**`GET /projects/{id}/generations/progress`** answers *how much longer*:
+
+```json
+{"waitingForYou": false, "openQuestions": 0, "stepsRemaining": 4,
+ "estimatedSeconds": 180, "message": "Building your sandbox — about 3 minutes."}
+```
+
+The estimate is **configured, not measured** — there are no real timings yet, and a made-up
+average presented as data is worse than an honest constant ops can correct with one `UPDATE`.
+Before the spec exists the seed steps are assumed; after it they are counted, so the estimate
+gets more truthful as the generation proceeds.
+
+When `waitingForYou` is true there is **no estimate at all**. The clock is not running, and a
+countdown to nothing is worse than nothing.
+
+### Revisions — changing a sandbox that exists
+
+**`POST /projects/{id}/revisions`** takes `{"instruction": "make five customers' cards blocked"}`
+and returns **202**. Asynchronous for the same reason a generation is: it is a model call.
+
+**The sandbox keeps serving throughout.** The change lands in one transaction, so a caller sees
+the state before or the state after and never half of one — taking a working sandbox offline to
+adjust five records would be a poor trade.
+
+If the instruction is ambiguous, **nothing is changed** and questions appear under
+`/clarifications`. Answering the last one re-runs the revision with the answers.
+
+Refused with **409** while something else is running for the project, or when the sandbox has no
+endpoints yet — there is nothing to revise.
+
+Three things a revision cannot do, by construction rather than by check:
+
+| | |
+| --- | --- |
+| touch another project, a plan, a quota or `app_config` | the plan the model produces can only name a collection *code*, resolved against the caller's own project. Those are unreachable, not forbidden |
+| rewrite a whole collection because the sentence was vague | an `UPDATE`/`DELETE` naming no records is refused |
+| apply part of a change | oversized changes are **refused, not clamped**, and the whole plan is one transaction |
+
+### Clarifications — the doubts
+
+Generation **stops** rather than guessing when a request is ambiguous in a way that would change
+the sandbox (ADR-0011). Until every question is answered, the sandbox is not built.
+
+**`GET /projects/{id}/clarifications`** — every question ever asked about this project, answered
+ones included. They are kept on purpose: three weeks later, *"we assumed `status = BLOCKED`
+because you did not say"* is something a user needs to be able to find.
+
+```json
+[{"id": "…", "question": "Which field marks a card as blocked?",
+  "detail": "A card carries both status and blocked, and they are not the same thing.",
+  "subject": {"resource": "cards", "field": "status"},
+  "options": [{"id": "opt1", "label": "status = BLOCKED", "detail": "The lifecycle field."},
+              {"id": "opt2", "label": "blocked = true",  "detail": "A separate flag."}],
+  "allowsAssumption": true, "status": "OPEN"}]
+```
+
+**`POST …/{cid}/answer`** takes `{"optionId": "opt1"}` or `{"answer": "free text"}`.
+
+**`POST …/{cid}/assume`** is *"you decide"* — a real answer, not a skip. What was assumed is
+recorded and readable afterwards. Refused with 400 on the rare question where a guess would make
+the sandbox confidently wrong about the very thing the user asked for.
+
+Answering the **last** open question resumes the generation. Answering an already-answered one
+is a 409, so a double click cannot start the chain twice.
 
 ### Two error codes with no route yet
 
@@ -46,9 +144,23 @@ rather than inventing a third:
 Both return a fixed generic message. The detail that names a variable, a row or a cap goes
 to the log only — see ADR-0009.
 
+### A body that will not parse is a 400
+
+Until Phase 3.4 it was a **500**, for every route here: `HttpMessageNotReadableException` had
+no handler and fell through to the catch-all. The caller was told the server had broken when
+their JSON had. Jackson's own message is logged rather than returned — it quotes the offending
+input, and on the generation route that input can be a user's pasted documentation.
+
+⚠️ **Jackson 3 will not map an absent field onto a primitive.** A request record with a
+`boolean` component rejects any body that omits it, before validation runs. Box it when absent
+is a legitimate way to say "no".
+
 ## Notes on what is implemented
 
-**`POST /projects`** returns `baseUrl` — the artifact the user came for. Manually created
+**`POST /projects`** returns `baseUrl` — the artifact the user came for. It is
+`{publicBaseUrl}/s/{projectId}`: **the sandbox is addressed by the project's own id**, so the
+identifier in the console URL and the one in the base URL are the same thing. There is no
+separate project key. Manually created
 projects are `READY` immediately; generation will create `DRAFT` ones and promote them.
 
 **`POST /projects/{id}/keys`** is the only response that ever carries `key`. Only a hash

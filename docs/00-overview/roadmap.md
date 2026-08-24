@@ -121,14 +121,16 @@ batch, and it must check quota *before* the insert, not after.
 | Ledger and caps | ✅ every call recorded; kill switch and daily caps enforced **before** the call. ADR-0009 |
 | Job runner | ✅ claim, retry, and the three failure classes |
 | Pipeline | ✅ RESEARCH · SPEC · SEED |
+| Chaining | ✅ RESEARCH → SPEC → one SEED per collection → `READY`, plus the HTTP surface to start one |
+| Clarifications | ✅ the system asks rather than guesses, and stops until answered (ADR-0011) |
+| Wait time | ✅ seconds and a sentence, and honestly nothing while waiting on the user |
 | Chat | ❌ threads, messages, and a tool surface that can only touch the project in scope |
-| REVISE | ❌ "make five customers' cards blocked" applied to an existing sandbox |
+| REVISE | ✅ "make five customers' cards blocked" applied to an existing sandbox — a validated plan, not tool calls |
 
-**3.1 and 3.2 are done, and 3.1 was the risky half.** The spending machinery exists, is
-enforced, and is proved by tests that need no API key — because a stub provider registers
-exactly as a real one does. The runner that will drive it is built and its state machine is
-tested, but it has no handlers, so nothing runs and nothing user-facing can reach it yet.
-That is the intended order.
+**3.1–3.3 and the chaining half of 3.4 are done. 3.1 was the risky half of the spending;
+the tool surface is the risky half of what remains.** The spending machinery exists, is enforced, and is proved by tests that need no API key —
+because a stub provider registers exactly as a real one does. The pipeline runs end to end
+behind it.
 
 **Decision M is settled** (ADR-0010): documentation is recommended, never required, and
 nothing is ever fetched. A user either supplies docs or explicitly opts into having the agent
@@ -143,8 +145,14 @@ What is missing is the thing that *joins* them. Each step is enqueued on its own
 nothing chains RESEARCH → SPEC → SEED, and nothing promotes a project from `DRAFT` to `READY`
 when the chain finishes. That, and the chat surface that starts it, is 3.4.
 
-**Exit criteria:** from one sentence — *"mimic Stripe's card API"* — a project reaches
-`READY` with endpoints, schemas and seed data, and its base URL serves them.
+**Exit criteria — met.** From one sentence, a project reaches `READY` with endpoints, schemas
+and seed data, and its base URL serves them.
+`GenerationPipelineTest.oneSentence_producesAReadySandboxThatServesGeneratedData` is that
+criterion as an executable test: it starts at an HTTP POST and finishes by calling the sandbox
+over HTTP, with no SQL in between.
+
+**What is left in Phase 3 is chat**, and the piece that has been called out since Phase 0 as
+the risky one: a tool surface the model can call.
 
 **The two risks that matter here**, both called out in the security docs:
 
