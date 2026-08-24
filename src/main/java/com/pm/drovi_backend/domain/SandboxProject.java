@@ -9,9 +9,14 @@ import java.util.UUID;
 /**
  * One sandbox: one base URL a caller pastes over their production URL.
  *
- * <p>{@link #projectKey} is the public half of that URL and is unguessable rather than
- * sequential, because when {@link AuthMode#NONE} is in force it is the only thing between
- * the internet and somebody else's pretend production data.
+ * <p>{@link #id} is the public half of that URL: {@code /s/{id}/…}. It is a v4 uuid, so
+ * unguessable rather than sequential — which matters because when {@link AuthMode#NONE} is in
+ * force it is the only thing between the internet and somebody else's pretend production data.
+ *
+ * <p>It used to be a separate random {@code project_key}. One identifier for one thing is
+ * kinder to a user holding both the console URL and the base URL, and 122 random bits is past
+ * guessing either way. The consequence to remember: a project id shared in a screenshot or a
+ * support thread is now also the sandbox's address.
  */
 @Entity
 @Table(name = "sandbox_project")
@@ -29,9 +34,6 @@ public class SandboxProject {
 
     @Column(name = "account_id", nullable = false)
     private UUID accountId;
-
-    @Column(name = "project_key", nullable = false)
-    private String projectKey;
 
     @Column(nullable = false)
     private String name;
@@ -74,11 +76,10 @@ public class SandboxProject {
      * endpoints yet, so it answers 404 to everything, which is honest. Generation creates
      * DRAFT projects instead and promotes them when a spec lands.
      */
-    public static SandboxProject create(UUID accountId, String projectKey, String name,
+    public static SandboxProject create(UUID accountId, String name,
                                         String sourceProduct, String sourceDocsUrl, AuthMode authMode) {
         SandboxProject project = new SandboxProject();
         project.accountId = accountId;
-        project.projectKey = projectKey;
         project.name = name;
         project.sourceProduct = sourceProduct;
         project.sourceDocsUrl = sourceDocsUrl;
@@ -101,6 +102,38 @@ public class SandboxProject {
         }
         if (latencyMs != null) {
             this.latencyMs = latencyMs;
+        }
+    }
+
+    /**
+     * Generation has started. The sandbox stops serving while it runs — {@link #isServing()}
+     * requires READY — and that is the point: a project's routes and its data should appear
+     * together, not one endpoint at a time as the pipeline gets to them.
+     *
+     * <p>An archived project is left alone. Generating into something the user has thrown away
+     * would quietly bring it back.
+     */
+    public void markGenerating() {
+        if (status != Status.ARCHIVED) {
+            this.status = Status.GENERATING;
+        }
+    }
+
+    /** Generation finished and the sandbox is worth calling. */
+    public void markReady() {
+        if (status == Status.GENERATING || status == Status.DRAFT) {
+            this.status = Status.READY;
+        }
+    }
+
+    /**
+     * Generation gave up. FAILED rather than back to DRAFT, because the two are different
+     * things to see in a list: one is a project waiting to be described, the other is one
+     * whose description did not work out and which the user may want to retry or delete.
+     */
+    public void markGenerationFailed() {
+        if (status == Status.GENERATING) {
+            this.status = Status.FAILED;
         }
     }
 

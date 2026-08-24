@@ -233,9 +233,25 @@ class SandboxRuntimeTest extends PostgresTestBase {
                 .andExpect(status().isUnauthorized());
     }
 
+    /**
+     * A base URL typed wrong. Since the sandbox is addressed by the project's uuid this is not
+     * even a well-formed id, and it must still answer in the SANDBOX's shape — a caller's error
+     * handling should never meet Spring's own 400 body, which the imitated product never sends.
+     */
     @Test
-    void unknownProjectKey_returnsNotFound() throws Exception {
+    void aMalformedSandboxAddress_returnsTheSandboxsOwnNotFound() throws Exception {
         mvc.perform(get("/s/does-not-exist/v1/cards"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("SANDBOX_NOT_FOUND"));
+    }
+
+    /**
+     * The other half: a perfectly well-formed id that is nobody's project. Answered identically,
+     * so the response cannot be used to discover which sandboxes exist.
+     */
+    @Test
+    void aWellFormedIdThatIsNobodysProject_returnsTheSameNotFound() throws Exception {
+        mvc.perform(get("/s/" + UUID.randomUUID() + "/v1/cards"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("SANDBOX_NOT_FOUND"));
     }
@@ -262,7 +278,6 @@ class SandboxRuntimeTest extends PostgresTestBase {
         final UUID projectId;
         final UUID collectionId;
         final UUID apiCollectionId;
-        final String projectKey = "pk-" + UUID.randomUUID();
 
         Fixture(String collectionCode) {
             this(collectionCode, "NONE");
@@ -274,9 +289,9 @@ class SandboxRuntimeTest extends PostgresTestBase {
                     UUID.class, "uid-" + UUID.randomUUID());
             this.projectId = jdbc.queryForObject("""
                     INSERT INTO sandbox_project
-                        (account_id, project_key, name, source_product, status, auth_mode)
-                    VALUES (?, ?, 'Cards sandbox', 'Test card issuer', 'READY', ?) RETURNING id
-                    """, UUID.class, accountId, projectKey, authMode);
+                        (account_id, name, source_product, status, auth_mode)
+                    VALUES (?, 'Cards sandbox', 'Test card issuer', 'READY', ?) RETURNING id
+                    """, UUID.class, accountId, authMode);
             // A schema with declared properties, because the filter only trusts fields the
             // collection says it has.
             this.collectionId = jdbc.queryForObject("""
@@ -290,7 +305,8 @@ class SandboxRuntimeTest extends PostgresTestBase {
         }
 
         String url(String path) {
-            return "/s/" + projectKey + path;
+            // The sandbox is addressed by the project's own id.
+            return "/s/" + projectId + path;
         }
 
         void record(String key, String json) {

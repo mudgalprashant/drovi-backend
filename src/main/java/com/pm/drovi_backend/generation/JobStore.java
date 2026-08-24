@@ -11,6 +11,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.sql.ResultSet;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -128,13 +129,91 @@ public class JobStore {
 
     @Transactional
     public void succeed(UUID jobId, String resultJson) {
+        succeed(jobId, resultJson, List.of());
+    }
+
+    /**
+     * Mark this job succeeded and enqueue what follows it, in <strong>one transaction</strong>.
+     *
+     * <p>Split across two, the pipeline gets to break in both directions: a successor enqueued
+     * against a predecessor that was never recorded as succeeded, or a job marked succeeded
+     * with nothing following it and a generation that simply stops halfway with no error.
+     * Neither is detectable afterwards without reconstructing what should have happened.
+     *
+     * @param next successors, already decided. They inherit this job's account, project and
+     *             thread — a chain that could change owner mid-flight would be a way to write
+     *             into somebody else's project
+     */
+    @Transactional
+    public void succeed(UUID jobId, String resultJson, List<NewJob> next) {
         jdbc.update("""
                 UPDATE generation_job
                    SET status = 'SUCCEEDED', result = ?::jsonb, error_code = NULL,
                        error_message = NULL, finished_at = now(), updated_at = now()
                  WHERE id = ?
                 """, resultJson, jobId);
-        log.info("job.succeeded jobId={}", jobId);
+
+        for (NewJob successor : next) {
+            jdbc.update("""
+                    INSERT INTO generation_job (account_id, project_id, thread_id, kind, prompt, input)
+                    SELECT account_id, project_id, thread_id, ?, ?, ?::jsonb
+                      FROM generation_job WHERE id = ?
+                    """, successor.kind().name(), successor.prompt(),
+                    mapper.writeValueAsString(successor.input()), jobId);
+        }
+
+        log.info("job.succeeded jobId={} enqueued={}", jobId, next.size());
+    }
+
+    /**
+     * The step a paused generation stopped after.
+     *
+     * <p>The most recent succeeded job is, by definition, the one whose successors were never
+     * enqueued — which is how a generation waiting on a question knows where to pick up again
+     * without storing "what to do next" as a second source of truth.
+     */
+    @Transactional(readOnly = true)
+    public Optional<GenerationJob> lastSucceededFor(UUID projectId) {
+        return jdbc.query("""
+                SELECT %s FROM generation_job
+                 WHERE project_id = ? AND status = 'SUCCEEDED'
+                 ORDER BY finished_at DESC
+                 LIMIT 1
+                """.formatted(COLUMNS),
+                rs -> rs.next() ? Optional.of(job.mapRow(rs, 1)) : Optional.<GenerationJob>empty(),
+                projectId);
+    }
+
+    /** Enqueue successors for a job that already succeeded, when a pause is being lifted. */
+    @Transactional
+    public void enqueueAll(UUID afterJobId, List<NewJob> next) {
+        for (NewJob successor : next) {
+            jdbc.update("""
+                    INSERT INTO generation_job (account_id, project_id, thread_id, kind, prompt, input)
+                    SELECT account_id, project_id, thread_id, ?, ?, ?::jsonb
+                      FROM generation_job WHERE id = ?
+                    """,
+                    successor.kind().name(), successor.prompt(),
+                    mapper.writeValueAsString(successor.input()), afterJobId);
+        }
+        if (!next.isEmpty()) {
+            log.info("job.enqueued.after jobId={} count={}", afterJobId, next.size());
+        }
+    }
+
+    /**
+     * Whether anything is still outstanding for a project — which is how the last step of a
+     * generation recognises itself. A SEED job cannot know it is the last one; it can only know
+     * that nothing else is left.
+     */
+    @Transactional(readOnly = true)
+    public boolean hasUnfinishedJobs(UUID projectId, UUID excludingJobId) {
+        return jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM generation_job
+                                WHERE project_id = ?
+                                  AND id <> ?
+                                  AND status IN ('QUEUED','RUNNING'))
+                """, Boolean.class, projectId, excludingJobId);
     }
 
     /**

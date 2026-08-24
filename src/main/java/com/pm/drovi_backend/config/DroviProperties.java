@@ -10,10 +10,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "drovi")
 public record DroviProperties(String publicBaseUrl) {
 
-    public String baseUrlFor(String projectKey) {
+    public String baseUrlFor(java.util.UUID projectId) {
         String origin = publicBaseUrl == null || publicBaseUrl.isBlank()
                 ? "http://localhost:8080"
                 : publicBaseUrl.replaceAll("/+$", "");
-        return origin + "/s/" + projectKey;
+        return origin + "/s/" + projectId;
     }
 }

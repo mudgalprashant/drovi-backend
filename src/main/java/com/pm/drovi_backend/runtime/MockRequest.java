@@ -10,7 +10,7 @@ import java.util.Optional;
  * <p>Deliberately a plain record: the runtime is the part of this system most worth
  * testing exhaustively, and it should be drivable from a unit test without a web layer.
  *
- * @param path   the portion after {@code /s/{projectKey}}, always starting with '/'
+ * @param path   the portion after {@code /s/{projectId}}, always starting with '/'
  * @param headers header names lowercased, because callers disagree about capitalisation
  */
 public record MockRequest(String method,
