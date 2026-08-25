@@ -60,7 +60,24 @@ looks like.
 | Not followed | a `$ref` to a URL or another file. Local `#/components/schemas/…` refs *are* resolved — they are in the document you pasted |
 
 Anything unrecognised, or a document that yields no usable routes, falls back to the normal
-research path and costs nothing extra. Nothing is fetched: paste the document, do not link it. With neither `docs` nor
+research path and costs nothing extra.
+
+**`docsUrl` is now read, not just recorded** (ADR-0012). Two shapes of link work:
+
+| You give | What happens |
+| --- | --- |
+| a link to a spec — `https://…/openapi.json` | fetched and read directly |
+| a link to an API — `https://api.example.com` | the well-known spec locations are tried (`/openapi.json`, `/swagger.json`, `/v3/api-docs`, `/.well-known/openapi.json`) |
+| a link to anything else | what comes back is researched, as if you had pasted it |
+
+Pasting still wins: supply both `docs` and `docsUrl` and nothing is fetched, because you have
+already given the authoritative version. The URL recorded on the job is the one **actually
+read**, after redirects.
+
+⚠️ **HTTPS only, and public addresses only.** A link that resolves to a private address, to
+loopback, to a cloud metadata endpoint, or back to this service is refused with a 400 saying so.
+Redirects are followed by hand and re-checked at every hop. See ADR-0012 for what that does and
+does not close. With neither `docs` nor
 `agentResearchOnly`, the job fails asking for one — absent and *declined* are different
 requests, and collapsing them would hand every caller the least accurate path.
 
