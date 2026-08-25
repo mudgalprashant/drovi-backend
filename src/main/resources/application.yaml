@@ -104,6 +104,15 @@ spring:
 #     project-id: set-via-DROVI_FIREBASE_PROJECT_ID
 
 drovi:
+  # Where the console runs, comma-separated. Exact origins, never a pattern: a wildcard
+  # pattern is how a list like this quietly becomes "anywhere ending in a domain somebody
+  # else can register".
+  #
+  # Without a matching entry here, every request the console makes fails its preflight and
+  # the browser reports a network error that says nothing about the API. It is the first
+  # thing to check when a freshly deployed console cannot reach a working backend.
+  console-origins: ${DROVI_CONSOLE_ORIGINS:http://localhost:3000}
+
   # Origin only, no path. This is what a project's base URL is built from, so a wrong
   # value here ends up pasted into every user's codebase. Not a secret.
   public-base-url: ${DROVI_PUBLIC_BASE_URL:http://localhost:8080}

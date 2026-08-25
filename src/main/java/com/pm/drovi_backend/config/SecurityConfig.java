@@ -28,7 +28,9 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.config.Customizer;
 import tools.jackson.databind.ObjectMapper;
@@ -57,9 +59,12 @@ public class SecurityConfig {
      */
     @Bean
     @Order(1)
-    SecurityFilterChain sandboxChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain sandboxChain(HttpSecurity http,
+                                     @Qualifier("corsConfigurationSource") CorsConfigurationSource corsSource)
+            throws Exception {
         return http.securityMatcher("/s/**")
                 .authorizeHttpRequests(a -> a.anyRequest().permitAll())
+                .cors(c -> c.configurationSource(corsSource))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // The imitated product sets its own headers; ours must not leak into a
@@ -90,6 +95,7 @@ public class SecurityConfig {
     @Bean
     @Order(3)
     SecurityFilterChain consoleChain(HttpSecurity http,
+                                     @Qualifier("corsConfigurationSource") CorsConfigurationSource corsSource,
                                      ObjectProvider<JwtDecoder> jwtDecoder,
                                      ObjectProvider<Converter<Jwt, AbstractAuthenticationToken>> converter)
             throws Exception {
@@ -97,6 +103,10 @@ public class SecurityConfig {
         // Not merely authenticated: the account must be usable. A suspended one holds a
         // valid token and no authority, so it is denied rather than let through.
         http.authorizeHttpRequests(a -> a.anyRequest().hasAuthority(DroviPrincipal.ACTIVE_AUTHORITY))
+                // Before the authority check has any say: a preflight carries no Authorization
+                // header, so without CORS wired here every console request fails at OPTIONS and
+                // the browser reports a network error rather than a 401.
+                .cors(c -> c.configurationSource(corsSource))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
