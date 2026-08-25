@@ -89,6 +89,10 @@ public class SpecWriter {
         // offer.
         projects.update(accountId, projectId, null, plan.authMode(), plan.authHeaderName(), null);
 
+        // Thread N: a replica whose 404 is Drovi-shaped is not faithful on the branch a caller
+        // most wants to test. Set from what research found, never hardcoded for one product.
+        projects.useErrorEnvelope(accountId, projectId, plan.errorEnvelope());
+
         log.info("spec.written projectId={} collections={} endpoints={}",
                 projectId, plan.collections().size(), plan.endpoints().size());
         return Map.of(
@@ -100,6 +104,7 @@ public class SpecWriter {
                 "collectionIds", collectionIds.entrySet().stream()
                         .collect(java.util.stream.Collectors.toMap(
                                 Map.Entry::getKey, entry -> entry.getValue().toString())),
+                "errorEnvelope", !plan.errorEnvelope().isEmpty(),
                 "endpointCount", plan.endpoints().size());
     }
 }
