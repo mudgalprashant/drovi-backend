@@ -209,16 +209,17 @@ Everything here is a known gap today, and each one is a real incident waiting to
 | Stuck-job sweeper | ✅ reclaims rather than fails, and takes the project out of `GENERATING` |
 | Rate limiting on `/s/**` | ✅ per project and per caller, checked before the database |
 | **Per-project error envelope** | ✅ **thread N closed.** In-character errors wear the product's shape; ours stay ours |
-| Structured logging + correlation ids | ❌ the inspector explains one call; this explains the system |
-| Alerting | ❌ spend, storage, unmatched-route rate |
+| Structured logging + correlation ids | ✅ the id now reaches a log line, and background work has one |
+| Alerting | ✅ spend, storage, unmatched-route rate — each with a runbook procedure |
 
 **Exit criteria:** a week of real traffic with no manual intervention, and the runbook's
 procedures have each been walked once.
 
-**Four of six done.** What is left is observability rather than survival: the system now purges
-what it writes, recovers work a dead runner abandoned, refuses abuse, and answers errors in
-character. Structured logging and alerting are what turn "it broke" into "here is what broke",
-and neither is load-bearing for correctness.
+**Phase 5 is complete — the v1 cut line is reached.** The system purges what it writes, recovers
+work a dead runner abandoned, refuses abuse, answers errors in character, and now says something
+while a limit is being *approached* rather than only when a control refuses somebody.
+
+P0–P5 is a product someone can use for real work. What follows is P6, which makes it a business.
 
 ---
 

@@ -69,10 +69,10 @@ Full rules: [docs/02-implementation/branching-and-workflow.md](docs/02-implement
 | Spec import | ✅ paste an OpenAPI or Postman document and it is read directly, not researched |
 | Reading a link | ✅ give a spec URL or an API's base URL. HTTPS and public addresses only (ADR-0012) |
 | Hardening | ✅ log purge, stuck-job sweeper, rate limiting, per-project error shape (Phase 5.1–5.4) |
-| Observability | ❌ structured logs and alerting — the rest of Phase 5 |
+| Observability | ✅ correlation ids in every line, and alerts on spend, storage and route misses |
 | Console (web app) | ❌ not started |
 
-310 tests green against a real embedded Postgres.
+326 tests green against a real embedded Postgres.
 
 The runtime is real: seed a project and it serves. What it cannot yet do is
 *generate* one from a chat message — that is the next slice, and it is the one

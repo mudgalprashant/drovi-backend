@@ -511,9 +511,32 @@ simulated ones, and a user staring at a 429 needs to know which of us is refusin
 
 Applied at one exit rather than at each of the eight sites that can produce an error.
 
-### 5.5 Observability ❌
+### 5.5 Observability ✅
 
-Correlation ids, structured logs, and alerts on spend, storage and unmatched-route rate.
+**Correlation ids that appear.** Every request has carried one since Phase 1 — into the MDC, the
+error body and a response header — and it never reached a *log line*, because Boot's default
+pattern excludes MDC values and nothing overrode it. The id a user quoted found nothing when
+grepped, which is the one job it had.
+
+Background work had none at all. A job now correlates by its **own id**, so the string in the
+logs is the string in `generation_job`. `Correlation.as` restores rather than clears, because
+scheduled work runs on reused threads.
+
+`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs` gives JSON with the MDC as fields — Boot's own support,
+no extra dependency, off by default because the pattern is what a person reads.
+
+**Alerts** (`ops/UsageWatch`) on spend against its cap, stored bytes against a budget below
+Supabase's 500 MB, and the unmatched-route rate — which the roadmap names as *the* signal that
+generation quality is not good enough.
+
+Logs, not metrics: nothing scrapes this service. Metrics nobody collects are a data structure,
+not an alert. Every alert names a runbook procedure, per the project's own rule.
+
+⚠️ **Found while doing this:** `src/test/resources/application.yaml`, added in Phase 3.2 for one
+line, was *shadowing* the main configuration entirely — Boot resolves `classpath:/application.yaml`
+to the first match and test classes come first. Every test run since had no `ddl-auto: validate`,
+so the guard against entity/schema drift was not running. The override is a system property in
+`build.gradle` now.
 
 ---
 
