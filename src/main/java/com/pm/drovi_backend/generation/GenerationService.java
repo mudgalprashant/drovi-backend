@@ -5,6 +5,7 @@ import com.pm.drovi_backend.common.ErrorCode;
 import com.pm.drovi_backend.config.AppConfigService;
 import com.pm.drovi_backend.domain.SandboxProject;
 import com.pm.drovi_backend.generation.clarify.ClarificationService;
+import com.pm.drovi_backend.generation.pipeline.SpecImporter;
 import com.pm.drovi_backend.project.ApiSpecService;
 import com.pm.drovi_backend.project.ProjectService;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -56,6 +58,7 @@ public class GenerationService {
     private final ProjectService projects;
     private final ApiSpecService spec;
     private final ClarificationService clarifications;
+    private final SpecImporter specImporter;
     private final AppConfigService config;
     private final JdbcTemplate jdbc;
 
@@ -86,6 +89,24 @@ public class GenerationService {
         // The sandbox stops serving until the chain finishes, so a project's routes and its
         // data appear together rather than one endpoint at a time.
         projects.markGenerating(accountId, projectId);
+
+        // A recognised OpenAPI document or Postman collection skips RESEARCH entirely and starts
+        // at SPEC, which then needs no model call either. The specification is not a hint about
+        // the API — it is the API, and researching it would produce something less accurate at a
+        // cost. Unrecognised input falls through to the normal path, costing nothing.
+        // Asked as "will reading this produce a sandbox", not "does this look like a spec".
+        // An OpenAPI file with an empty paths object is unmistakably OpenAPI and describes
+        // nothing; routing it here would fail the user's generation instead of researching.
+        Optional<SpecImporter.Format> importable = specImporter.importableAs(docs);
+        if (importable.isPresent()) {
+            GenerationJob imported = jobs.enqueue(accountId, projectId, null, JobKind.SPEC,
+                    "Import the supplied specification",
+                    Map.of("spec", docs, "specFormat", importable.get().name()));
+            log.info("generation.started.fromSpec jobId={} projectId={} format={}",
+                    imported.id(), projectId, importable.get());
+            return imported;
+        }
+
         GenerationJob job = jobs.enqueue(accountId, projectId, null, JobKind.RESEARCH,
                 String.valueOf(input.get("product")), input);
         log.info("generation.started jobId={} projectId={} withDocs={}",

@@ -113,7 +113,7 @@ record SpecPlan(String projectName,
      * silently serves nothing. Each check is a failure a user would meet as "the sandbox is
      * broken" rather than as "generation failed", which is the difference worth paying for.
      */
-    private void validate() {
+    void validate() {
         require(!collections.isEmpty(), "the spec declares no data collections");
         require(!endpoints.isEmpty(), "the spec declares no endpoints");
 
