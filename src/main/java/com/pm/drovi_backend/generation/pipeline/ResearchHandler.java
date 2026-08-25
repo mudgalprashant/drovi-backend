@@ -129,10 +129,13 @@ class ResearchHandler implements JobHandler {
                 .append("PRODUCT TO DESCRIBE:\n").append(request.product());
 
         if (request.docsUrl() != null) {
-            // Recorded as provenance only. Stating that plainly stops a model deciding it
-            // should have browsed to it.
-            turn.append("\n\nThe user says this documentation came from: ").append(request.docsUrl())
-                    .append("\n(You cannot open it. Do not pretend to have read it.)");
+            // Provenance. When a link was read, this is where the documentation below came from
+            // — and when it was only cited, the model still cannot open it. Saying so plainly
+            // stops it deciding it should have browsed there.
+            turn.append("\n\nSource: ").append(request.docsUrl())
+                    .append(request.hasDocs()
+                            ? "\n(The text below was read from that link. Describe what it says.)"
+                            : "\n(You cannot open it. Do not pretend to have read it.)");
         }
         if (job != null) {
             String settled = alreadySettled(job);

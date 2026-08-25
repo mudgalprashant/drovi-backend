@@ -6,6 +6,7 @@ import com.pm.drovi_backend.config.AppConfigService;
 import com.pm.drovi_backend.domain.SandboxProject;
 import com.pm.drovi_backend.generation.clarify.ClarificationService;
 import com.pm.drovi_backend.generation.pipeline.SpecImporter;
+import com.pm.drovi_backend.generation.pipeline.SpecUrlResolver;
 import com.pm.drovi_backend.project.ApiSpecService;
 import com.pm.drovi_backend.project.ProjectService;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +60,7 @@ public class GenerationService {
     private final ApiSpecService spec;
     private final ClarificationService clarifications;
     private final SpecImporter specImporter;
+    private final SpecUrlResolver specUrls;
     private final AppConfigService config;
     private final JdbcTemplate jdbc;
 
@@ -76,14 +78,27 @@ public class GenerationService {
         requireNothingAlreadyRunning(projectId);
         requireEmptyProject(accountId, projectId);
 
+        // A link is read, now that ADR-0012 permits it. Pasted content still wins — if the user
+        // supplied both, they have already given us the authoritative version and there is no
+        // reason to reach out to the network for a second opinion.
+        String supplied = docs;
+        String source = docsUrl;
+        if ((supplied == null || supplied.isBlank()) && docsUrl != null && !docsUrl.isBlank()) {
+            SpecUrlResolver.Resolved resolved = specUrls.resolve(docsUrl);
+            supplied = resolved.isSpecification() ? resolved.specification() : resolved.documentation();
+            source = resolved.source().toString();
+        }
+
         Map<String, Object> input = new HashMap<>();
         input.put("product", product != null && !product.isBlank() ? product : project.getSourceProduct());
         input.put("agentResearchOnly", agentResearchOnly);
-        if (docs != null && !docs.isBlank()) {
-            input.put("docs", docs);
+        if (supplied != null && !supplied.isBlank()) {
+            input.put("docs", supplied);
         }
-        if (docsUrl != null && !docsUrl.isBlank()) {
-            input.put("docsUrl", docsUrl);
+        if (source != null && !source.isBlank()) {
+            // The URL actually read, after redirects — not the one typed. If a sandbox turns out
+            // wrong, the question is what we read, not what was aimed at.
+            input.put("docsUrl", source);
         }
 
         // The sandbox stops serving until the chain finishes, so a project's routes and its
@@ -97,11 +112,11 @@ public class GenerationService {
         // Asked as "will reading this produce a sandbox", not "does this look like a spec".
         // An OpenAPI file with an empty paths object is unmistakably OpenAPI and describes
         // nothing; routing it here would fail the user's generation instead of researching.
-        Optional<SpecImporter.Format> importable = specImporter.importableAs(docs);
+        Optional<SpecImporter.Format> importable = specImporter.importableAs(supplied);
         if (importable.isPresent()) {
             GenerationJob imported = jobs.enqueue(accountId, projectId, null, JobKind.SPEC,
                     "Import the supplied specification",
-                    Map.of("spec", docs, "specFormat", importable.get().name()));
+                    Map.of("spec", supplied, "specFormat", importable.get().name()));
             log.info("generation.started.fromSpec jobId={} projectId={} format={}",
                     imported.id(), projectId, importable.get());
             return imported;
