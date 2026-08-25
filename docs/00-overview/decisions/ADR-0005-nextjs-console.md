@@ -2,6 +2,10 @@
 
 **Status:** accepted · **Date:** 2026-08-23
 
+> **Extended by ADR-0013:** the console is hosted on **Firebase Hosting** as a static
+> export. This ADR's real content was excluding Vercel on terms; Firebase carries no
+> such restriction, and Render and Cloudflare remain fine.
+
 ## Context
 
 Drovi's client was previously specified as a React Native + Expo mobile app, for an
