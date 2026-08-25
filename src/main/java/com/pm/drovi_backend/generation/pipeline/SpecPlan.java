@@ -33,6 +33,7 @@ import java.util.regex.Pattern;
 record SpecPlan(String projectName,
                 SandboxProject.AuthMode authMode,
                 String authHeaderName,
+                Map<String, Object> errorEnvelope,
                 List<Collection> collections,
                 List<Endpoint> endpoints) {
 
@@ -103,6 +104,10 @@ record SpecPlan(String projectName,
                 string(raw.get("projectName")),
                 authMode(string(raw.get("authMode"))),
                 string(raw.get("authHeaderName")),
+                // The imitated product's error shape. Absent is fine and common — the sandbox
+                // then answers Drovi's shape, exactly as every project did before thread N.
+                raw.get("errorEnvelope") instanceof Map<?, ?> envelope
+                        ? (Map<String, Object>) envelope : Map.of(),
                 collections, endpoints);
         plan.validate();
         return plan;
