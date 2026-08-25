@@ -398,6 +398,23 @@ route the runtime cannot serve just as easily as a model can invent one.
 differ — an OpenAPI file with an empty `paths` object is unmistakably OpenAPI and describes
 nothing — and conflating them failed a user's generation instead of falling back.
 
+#### Reading a link ✅
+
+**ADR-0012**, which amends ADR-0010's "nothing is fetched".
+
+Almost all of this is `UrlGuard`, because fetching a user-supplied URL is request forgery unless
+it is stopped from being: HTTPS only, every resolved address public, our own host refused,
+redirects re-checked per hop and capped, a byte ceiling, a timeout, no credentials, and a kill
+switch defaulting to **off in code**.
+
+An allowlist of shapes, not a blocklist of strings — `127.0.0.1` has many spellings.
+
+`SpecUrlResolver` handles the two shapes of link: straight to a spec, or to an API whose spec is
+at a well-known location. Probing only happens for a link with no path, and the list is short on
+purpose.
+
+⚠️ **DNS rebinding is not closed.** Written down in the ADR and the class rather than glossed.
+
 #### Chat ✅
 
 `chat_thread` / `chat_message`, and `ChatNarrator`.

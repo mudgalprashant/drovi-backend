@@ -156,9 +156,10 @@ over HTTP, with no SQL in between.
 the model can call — was met by *not having one*: a model's write is a plan the platform
 validates and applies (#51).
 
-The one thing named in the product goal and deliberately not built is **taking an existing
-sandbox's URL as an input**. It requires fetching, which ADR-0010 rules out; that is a decision,
-not a missing function.
+**Every input the product goal names now works**: a described product, a pasted specification or
+Postman collection, and a link — to a spec or to an API whose spec is discoverable (ADR-0012).
+Reading a link is almost entirely a request-forgery problem, and the guard is where that work
+went.
 
 **The two risks that matter here**, both called out in the security docs:
 
