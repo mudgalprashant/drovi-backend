@@ -74,6 +74,10 @@ class SpecHandler implements JobHandler {
             parameters only filter a LIST when the schema declares that field, so a field \
             people filter by must be in there.
             - Invent nothing that carries personal data.
+            - errorEnvelope is what the product returns when something goes WRONG — a missing \
+            record, a bad key. Getting this right is what makes a caller's error handling \
+            testable against the mock. Omit it rather than guess: a confidently wrong error \
+            shape is worse than ours, which at least looks unfamiliar.
             """;
 
     private final AiGateway ai;
@@ -211,6 +215,12 @@ class SpecHandler implements JobHandler {
                             "description", "How the real product authenticates its callers."),
                     "authHeaderName", Map.of("type", "string",
                             "description", "Only for HEADER_KEY, e.g. 'X-Api-Key'."),
+                    "errorEnvelope", Map.of("type", "object",
+                            "description", "The shape THIS product returns when something is wrong, as a "
+                                    + "template. Use {{status}}, {{code}} and {{message}} where the values go — "
+                                    + "for example {\"error\":{\"type\":\"invalid_request_error\","
+                                    + "\"code\":\"{{code}}\",\"message\":\"{{message}}\"}}. Omit it if the "
+                                    + "product's error shape is not known; a wrong shape is worse than ours."),
                     "collections", Map.of("type", "array",
                             "description", "The things this API stores. Endpoints read and write these.",
                             "items", Map.of("type", "object",

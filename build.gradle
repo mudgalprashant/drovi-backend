@@ -72,4 +72,16 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+
+	// The scheduler is off for tests, so no background thread claims generation_job rows
+	// while other tests are setting up their fixtures. JobSchedulingTest turns it back on for
+	// itself, because "does @Scheduled actually fire" cannot be assumed.
+	//
+	// A SYSTEM PROPERTY rather than src/test/resources/application.yaml, and that is not a
+	// style choice. Boot resolves classpath:/application.yaml to the FIRST match, and the test
+	// classes directory comes first — so a test-side file of that name does not add to the main
+	// configuration, it REPLACES it. It did, silently, from Phase 3.2 until this was noticed:
+	// ddl-auto validate, the Flyway baseline and the log pattern were all absent from every
+	// test run, which meant the guard against entity/schema drift was not actually running.
+	systemProperty 'drovi.jobs.scheduler-enabled', 'false'
 }

@@ -464,13 +464,79 @@ model-generated data.
 
 ## Phase 5 — Hardening · v1 cut line
 
-| Slice | Detail |
-| --- | --- |
-| 5.1 Retention purge | `mock_request_log` older than the plan's `log_retention_days`. Batched deletes; the table has no purge today and will fill the database first |
-| 5.2 Job sweeper | reclaim `RUNNING` jobs older than `ai.job.timeout.seconds` |
-| 5.3 Rate limiting | per project key and per IP on `/s/**`; in-process at one instance |
-| 5.4 **Per-project error envelope** | a generated error shape per project, so a 404 looks like the imitated product's 404. Until this lands, a replica's error path is not faithful |
-| 5.5 Observability | correlation ids, structured logs, alerts on spend, storage and unmatched-route rate |
+### 5.1 Retention purge ✅
+
+`ops/RequestLogPurge`. Batched because the inspector reads that table and a single delete of a
+few million rows holds locks for as long as it takes — a purge that has to be scheduled for a
+quiet hour is one that gets postponed.
+
+A **run** is bounded, not the backlog: a large arrears clears over several runs rather than one
+long transaction behaving like the unbatched delete it replaced. Retention is per plan, resolved
+inside the statement, because walking projects in Java and querying each is its own problem at a
+few thousand projects.
+
+### 5.2 Job sweeper ✅
+
+`ops/StuckJobSweeper`. **Reclaimed, not failed** — a job whose runner was killed has done nothing
+wrong, and failing it would make a deploy during a generation destroy the generation. The attempt
+stays spent, for the same reason it is charged at claim time.
+
+Only when attempts are exhausted does it fail, and then it tells the chain — which is what moves
+the project out of `GENERATING`. A tidy row and a dark sandbox is the wrong half to fix.
+
+⚠️ It asks the runner what it is working on first. Without that, a slow step is requeued
+underneath its own runner, which then finishes and marks the same row `SUCCEEDED`, leaving a
+duplicate queued job that generates over the top of a project that was just built.
+
+### 5.3 Rate limiting ✅
+
+`runtime/SandboxRateLimiter`. Per project (protects the platform from one sandbox) and per caller
+`/24` (protects a project from one caller). Checked **before** the database and before the log
+write — a guard that first reads a row and writes another costs more under abuse than it saves.
+
+A fixed window, so the worst case is twice the limit across a boundary. Fine for bounding
+sustained load. Zero means no traffic, not unlimited.
+
+Not `plan_catalog.max_mock_requests_per_month` — that is an entitlement for Phase 6.
+
+### 5.4 Per-project error envelope ✅ — thread N closed
+
+`sandbox_project.error_envelope`, a template rendered with `{{status}}`, `{{code}}` and
+`{{message}}`. Set by SPEC from what research found; never hardcoded for one product, so a flat
+`{"detail": "…"}` product is the same work as Stripe.
+
+**Only in-character errors** — a missing record, a rejected key, an unmatched route, a duplicate.
+Drovi's own failures keep Drovi's shape: the inspector must show platform errors as distinct from
+simulated ones, and a user staring at a 429 needs to know which of us is refusing them.
+
+Applied at one exit rather than at each of the eight sites that can produce an error.
+
+### 5.5 Observability ✅
+
+**Correlation ids that appear.** Every request has carried one since Phase 1 — into the MDC, the
+error body and a response header — and it never reached a *log line*, because Boot's default
+pattern excludes MDC values and nothing overrode it. The id a user quoted found nothing when
+grepped, which is the one job it had.
+
+Background work had none at all. A job now correlates by its **own id**, so the string in the
+logs is the string in `generation_job`. `Correlation.as` restores rather than clears, because
+scheduled work runs on reused threads.
+
+`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs` gives JSON with the MDC as fields — Boot's own support,
+no extra dependency, off by default because the pattern is what a person reads.
+
+**Alerts** (`ops/UsageWatch`) on spend against its cap, stored bytes against a budget below
+Supabase's 500 MB, and the unmatched-route rate — which the roadmap names as *the* signal that
+generation quality is not good enough.
+
+Logs, not metrics: nothing scrapes this service. Metrics nobody collects are a data structure,
+not an alert. Every alert names a runbook procedure, per the project's own rule.
+
+⚠️ **Found while doing this:** `src/test/resources/application.yaml`, added in Phase 3.2 for one
+line, was *shadowing* the main configuration entirely — Boot resolves `classpath:/application.yaml`
+to the first match and test classes come first. Every test run since had no `ddl-auto: validate`,
+so the guard against entity/schema drift was not running. The override is a system property in
+`build.gradle` now.
 
 ---
 

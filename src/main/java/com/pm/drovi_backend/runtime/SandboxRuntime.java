@@ -42,6 +42,17 @@ public class SandboxRuntime {
     private static final Set<String> PAGING_PARAMS =
             Set.of("limit", "offset", "page", "page_size", "pagesize", "per_page", "cursor", "starting_after");
 
+    /**
+     * The errors a REPLICA produces — a missing record, a rejected key, a route the product does
+     * not have, a duplicate. These wear the imitated product's shape.
+     *
+     * <p>Everything absent from this set is Drovi speaking: {@code SANDBOX_NOT_FOUND},
+     * {@code SANDBOX_MISCONFIGURED}, {@code QUOTA_EXCEEDED}, {@code RATE_LIMITED}. Dressing those
+     * up as the product would tell a user their integration is broken when in fact we are.
+     */
+    private static final Set<String> IN_CHARACTER_ERRORS =
+            Set.of("NOT_FOUND", "UNAUTHENTICATED", "ALREADY_EXISTS");
+
     private final SandboxProjectRepository projects;
     private final SandboxCollectionRepository collections;
     private final SandboxRecordRepository records;
@@ -64,6 +75,13 @@ public class SandboxRuntime {
         }
         SandboxProject project = found.get();
 
+        // One exit for the whole served path, so the project's own error shape is applied in a
+        // single place rather than at each of the eight sites that can produce one.
+        MockResponse response = inCharacter(project, dispatch(project, request));
+        return project.getLatencyMs() > 0 ? response.withDelay(project.getLatencyMs()) : response;
+    }
+
+    private MockResponse dispatch(SandboxProject project, MockRequest request) {
         if (authenticator.authenticate(project, request).isEmpty()) {
             return MockResponse.error(401, "UNAUTHENTICATED", "Missing or invalid API key.", null);
         }
@@ -73,7 +91,7 @@ public class SandboxRuntime {
         if (route.isEmpty()) {
             int status = config.getInt("runtime.unmatched.status", 404);
             log.info("runtime.unmatched projectId={} method={} path={}",
-                    projectId, request.method(), request.path());
+                    project.getId(), request.method(), request.path());
             return MockResponse.error(status, "NOT_FOUND",
                     "No endpoint matches %s %s.".formatted(request.method(), request.path()), null);
         }
@@ -81,10 +99,47 @@ public class SandboxRuntime {
         ApiEndpoint endpoint = route.get().endpoint();
         Map<String, String> pathParams = route.get().pathParams();
 
-        MockResponse response = ruleEngine.evaluate(endpoint.getId(), request, pathParams)
+        return ruleEngine.evaluate(endpoint.getId(), request, pathParams)
                 .orElseGet(() -> serveFromData(project, endpoint, request, pathParams));
+    }
 
-        return project.getLatencyMs() > 0 ? response.withDelay(project.getLatencyMs()) : response;
+    /**
+     * Dresses an error in the imitated product's shape.
+     *
+     * <p>Thread N, and the last thing standing between a faithful happy path and a faithful
+     * replica. Ask a mock of Stripe for a card that does not exist and it used to answer Drovi's
+     * shape — so the caller's error-handling branch, the one they most want to exercise against a
+     * mock, received a payload the real product never sends.
+     *
+     * <p><strong>Only errors the replica produces in character.</strong> Drovi's own failures keep
+     * Drovi's shape deliberately: the inspector has to show platform errors as distinct from
+     * simulated ones, and a user staring at a 429 needs to know whether it was the mock playing a
+     * part or the platform refusing them.
+     *
+     * <p>A rule that sets its own body is left alone — it already <em>is</em> the product's shape,
+     * chosen deliberately, and is not an error the platform produced.
+     */
+    private MockResponse inCharacter(SandboxProject project, MockResponse response) {
+        Map<String, Object> envelope = project.getErrorEnvelope();
+        if (envelope == null || envelope.isEmpty()
+                || response.errorCode() == null
+                || !IN_CHARACTER_ERRORS.contains(response.errorCode())) {
+            return response;
+        }
+        Object rendered = renderer.render(envelope, Map.of(
+                "status", response.status(),
+                "code", response.errorCode(),
+                "message", messageOf(response)), response.body());
+        return new MockResponse(response.status(), response.headers(), rendered,
+                response.matchedEndpointId(), response.matchedRuleId(),
+                response.delayMs(), response.errorCode());
+    }
+
+    private static String messageOf(MockResponse response) {
+        return response.body() instanceof Map<?, ?> body
+                && body.get("error") instanceof Map<?, ?> error
+                && error.get("message") instanceof String message
+                ? message : "";
     }
 
     private MockResponse serveFromData(SandboxProject project, ApiEndpoint endpoint,

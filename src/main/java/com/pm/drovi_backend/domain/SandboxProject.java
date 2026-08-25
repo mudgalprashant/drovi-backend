@@ -3,7 +3,11 @@ package com.pm.drovi_backend.domain;
 import jakarta.persistence.*;
 import lombok.Getter;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -34,6 +38,19 @@ public class SandboxProject {
 
     @Column(name = "account_id", nullable = false)
     private UUID accountId;
+
+    /**
+     * How errors this replica produces <em>in character</em> should look — a missing record, a
+     * rejected key, an unmatched route. Rendered by {@code TemplateRenderer} with
+     * {@code {{status}}}, {@code {{code}}} and {@code {{message}}}.
+     *
+     * <p>Null means Drovi's own shape. Drovi's <em>own</em> failures — rate limited, quota
+     * exhausted, no such sandbox — never use this: the inspector has to show platform errors as
+     * distinct from simulated ones, and a user needs to know which of us is refusing them.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "error_envelope")
+    private Map<String, Object> errorEnvelope;
 
     @Column(nullable = false)
     private String name;
@@ -86,6 +103,15 @@ public class SandboxProject {
         project.authMode = authMode;
         project.status = Status.READY;
         return project;
+    }
+
+    /**
+     * Set by generation from what research found about the imitated product. Deliberately not
+     * part of {@link #update}: it is a property of the imitation rather than a user preference,
+     * and a console field for hand-editing JSON is not the shape of that.
+     */
+    public void useErrorEnvelope(Map<String, Object> envelope) {
+        this.errorEnvelope = envelope == null || envelope.isEmpty() ? null : Map.copyOf(envelope);
     }
 
     /** Null fields are left alone, so PATCH is sparse rather than a full replace. */

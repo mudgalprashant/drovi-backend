@@ -203,17 +203,23 @@ paid tier breaches it (ADR-0005).
 
 Everything here is a known gap today, and each one is a real incident waiting to happen.
 
-| Deliverable | Why it is not optional |
+| Deliverable | State |
 | --- | --- |
-| `mock_request_log` retention purge | the fastest-growing table has **no** purge; it will fill the database first |
-| Stuck-job sweeper | `RUNNING` generations never recover without one |
-| Rate limiting on `/s/**` | the public surface has no abuse control at all |
-| **Per-project error envelope** | today a missing record returns *Drovi's* 404 shape, not the imitated product's — which partly defeats a faithful replica |
-| Structured logging + correlation ids | the inspector explains one call; this explains the system |
-| Alerting | spend, storage, unmatched-route rate |
+| `mock_request_log` retention purge | ✅ batched, per-plan retention, bounded per run |
+| Stuck-job sweeper | ✅ reclaims rather than fails, and takes the project out of `GENERATING` |
+| Rate limiting on `/s/**` | ✅ per project and per caller, checked before the database |
+| **Per-project error envelope** | ✅ **thread N closed.** In-character errors wear the product's shape; ours stay ours |
+| Structured logging + correlation ids | ✅ the id now reaches a log line, and background work has one |
+| Alerting | ✅ spend, storage, unmatched-route rate — each with a runbook procedure |
 
 **Exit criteria:** a week of real traffic with no manual intervention, and the runbook's
 procedures have each been walked once.
+
+**Phase 5 is complete — the v1 cut line is reached.** The system purges what it writes, recovers
+work a dead runner abandoned, refuses abuse, answers errors in character, and now says something
+while a limit is being *approached* rather than only when a control refuses somebody.
+
+P0–P5 is a product someone can use for real work. What follows is P6, which makes it a business.
 
 ---
 

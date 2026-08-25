@@ -162,6 +162,9 @@ public class SpecImporter {
                 root.path("info").path("title").asString("Imported sandbox"),
                 authModeOf(root),
                 authHeaderOf(root),
+                // A specification declares error SCHEMAS, not an example body, so there is
+                // nothing here to build a template from. Drovi's shape it is.
+                Map.of(),
                 collections,
                 endpoints));
     }
@@ -249,7 +252,7 @@ public class SpecImporter {
         }
         return validated(new SpecPlan(
                 root.path("info").path("name").asString("Imported sandbox"),
-                SandboxProject.AuthMode.BEARER, null, collections, endpoints));
+                SandboxProject.AuthMode.BEARER, null, Map.of(), collections, endpoints));
     }
 
     /** Folders nest arbitrarily deep, and the folder name is the group. */

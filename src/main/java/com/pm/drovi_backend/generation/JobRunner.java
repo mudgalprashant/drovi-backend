@@ -4,6 +4,7 @@ import com.pm.drovi_backend.ai.AiCappedException;
 import com.pm.drovi_backend.ai.AiProviderException;
 import com.pm.drovi_backend.ai.AiCallStatus;
 import com.pm.drovi_backend.ai.AiUnavailableException;
+import com.pm.drovi_backend.common.Correlation;
 import com.pm.drovi_backend.common.DroviException;
 import com.pm.drovi_backend.common.ErrorCode;
 import com.pm.drovi_backend.config.AppConfigService;
@@ -18,6 +19,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Claims one generation job at a time and runs it.
@@ -39,11 +41,10 @@ import java.util.Optional;
  * takes minutes and the pool is five connections; {@code AiGateway} enforces the middle step
  * by throwing, and this class is arranged so that never comes up.
  *
- * <h2>What is not here</h2>
+ * <h2>What happens when this process dies mid-job</h2>
  *
- * A sweeper for jobs left {@code RUNNING} by a crashed instance. That is Phase 5, and until
- * it exists {@code ai.job.timeout.seconds} is decorative — a killed runner leaves its job
- * RUNNING and nothing reclaims it.
+ * {@code ops/StuckJobSweeper} reclaims it after {@code ai.job.timeout.seconds}. It asks
+ * {@link #currentJobId()} first, so a slow job is never taken from a runner that is still on it.
  */
 @Component
 @Slf4j
@@ -65,6 +66,16 @@ public class JobRunner {
      * a value that is meaningless after a restart anyway.
      */
     private volatile Instant pausedUntil = Instant.EPOCH;
+
+    /**
+     * The job this process is working on, or null.
+     *
+     * <p>Exists for the stuck-job sweeper, which reclaims work from runners that are <em>gone</em>.
+     * A slow step is not a stuck one, and without this a long-running job gets requeued underneath
+     * its own runner — which then finishes and marks the same row SUCCEEDED, leaving a duplicate
+     * queued job that generates over the top of a project that was just built.
+     */
+    private volatile UUID currentJobId;
 
     public JobRunner(JobStore jobs, AppConfigService config, ObjectMapper mapper,
                      JobChain chain, List<JobHandler> handlers) {
@@ -130,8 +141,25 @@ public class JobRunner {
         if (claimed.isEmpty()) {
             return false;
         }
-        run(claimed.get());
+        GenerationJob job = claimed.get();
+        currentJobId = job.id();
+        try {
+            // The job's OWN id, not a fresh one: the string in the logs is the string in
+            // generation_job, so a user's failed generation and its log lines are found with the
+            // same query. A generation is five or six jobs and a dozen model calls, and
+            // reconstructing one used to mean reading timestamps.
+            Correlation.as(job.id().toString(), () -> run(job));
+        } finally {
+            // Cleared in a finally, or a runner that throws its way out leaves the sweeper
+            // permanently unable to reclaim the one job it most needs to.
+            currentJobId = null;
+        }
         return true;
+    }
+
+    /** What this process is working on, for the sweeper. Null when idle. */
+    public UUID currentJobId() {
+        return currentJobId;
     }
 
     private void run(GenerationJob job) {

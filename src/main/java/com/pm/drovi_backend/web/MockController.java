@@ -5,6 +5,7 @@ import com.pm.drovi_backend.config.AppConfigService;
 import com.pm.drovi_backend.runtime.MockRequest;
 import com.pm.drovi_backend.runtime.MockResponse;
 import com.pm.drovi_backend.runtime.QuotaService;
+import com.pm.drovi_backend.runtime.SandboxRateLimiter;
 import com.pm.drovi_backend.runtime.SandboxRuntime;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +39,7 @@ public class MockController {
     private final SandboxRuntime runtime;
     private final MockRequestLogger requestLogger;
     private final AppConfigService config;
+    private final SandboxRateLimiter rateLimiter;
     private final ObjectMapper mapper;
 
     @RequestMapping("/s/{projectId}/**")
@@ -59,6 +61,18 @@ public class MockController {
                             "No sandbox is serving at this URL.", null).body());
         }
 
+        // Before the database, and before anything is logged. A guard that first reads a row and
+        // writes another is a guard that costs more under abuse than it saves.
+        String caller = clientPrefix(servletRequest);
+        SandboxRateLimiter.Decision limit = rateLimiter.check(projectId, caller);
+        if (!limit.allowed()) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("Retry-After", String.valueOf(limit.retryAfterSeconds()))
+                    .body(MockResponse.error(HttpStatus.TOO_MANY_REQUESTS.value(), "RATE_LIMITED",
+                            "Too many requests to this sandbox. Try again shortly.", null).body());
+        }
+
         MockResponse response;
         try {
             response = runtime.handle(id, request);
@@ -72,7 +86,7 @@ public class MockController {
 
         applyDelay(response.delayMs());
         int latencyMs = (int) ((System.nanoTime() - startedAt) / 1_000_000);
-        requestLogger.record(id, request, response, latencyMs, clientPrefix(servletRequest));
+        requestLogger.record(id, request, response, latencyMs, caller);
 
         ResponseEntity.BodyBuilder builder = ResponseEntity.status(response.status())
                 .contentType(MediaType.APPLICATION_JSON);

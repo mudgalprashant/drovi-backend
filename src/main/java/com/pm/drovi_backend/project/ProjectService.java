@@ -87,6 +87,16 @@ public class ProjectService {
      * half-generated sandbox, and one that could set it GENERATING could stop its own sandbox
      * serving for no reason.
      */
+    /**
+     * How this replica's in-character errors should look. Generation's to set, not the user's:
+     * it is a property of the imitation, and a console field for hand-editing JSON is not the
+     * shape of that.
+     */
+    @Transactional
+    public void useErrorEnvelope(UUID accountId, UUID projectId, java.util.Map<String, Object> envelope) {
+        require(accountId, projectId).useErrorEnvelope(envelope);
+    }
+
     @Transactional
     public void markGenerating(UUID accountId, UUID projectId) {
         require(accountId, projectId).markGenerating();
