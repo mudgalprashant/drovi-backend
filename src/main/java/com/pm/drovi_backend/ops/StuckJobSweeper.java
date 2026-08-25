@@ -1,5 +1,6 @@
 package com.pm.drovi_backend.ops;
 
+import com.pm.drovi_backend.common.Correlation;
 import com.pm.drovi_backend.config.AppConfigService;
 import com.pm.drovi_backend.generation.GenerationJob;
 import com.pm.drovi_backend.generation.JobChain;
@@ -64,7 +65,10 @@ public class StuckJobSweeper {
             initialDelayString = "${drovi.ops.sweeper-initial-delay-ms:90000}")
     void scheduled() {
         try {
-            sweep();
+            // A fresh id per run, so one run's lines group together. Housekeeping had none:
+            // scheduled work starts with an empty MDC, and its log lines were the only ones in
+            // the system with nothing to group them by.
+            Correlation.as(this::sweep);
         } catch (RuntimeException e) {
             log.error("sweeper.failed", e);
         }

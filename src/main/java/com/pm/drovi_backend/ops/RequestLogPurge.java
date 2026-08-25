@@ -1,5 +1,6 @@
 package com.pm.drovi_backend.ops;
 
+import com.pm.drovi_backend.common.Correlation;
 import com.pm.drovi_backend.config.AppConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,7 +49,10 @@ public class RequestLogPurge {
             initialDelayString = "${drovi.ops.purge-initial-delay-ms:120000}")
     void scheduled() {
         try {
-            purge();
+            // A fresh id per run, so one run's lines group together. Housekeeping had none:
+            // scheduled work starts with an empty MDC, and its log lines were the only ones in
+            // the system with nothing to group them by.
+            Correlation.as(() -> purge());
         } catch (RuntimeException e) {
             // A scheduled method that throws is unscheduled by some executors and merely logged
             // by others. Neither is a thing to discover when the database is full.

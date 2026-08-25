@@ -148,3 +148,25 @@ management:
 logging:
   level:
     com.pm.drovi_backend: ${DROVI_LOG_LEVEL:INFO}
+
+  # ⚠️ THE %X{correlationId} IS THE POINT OF THIS BLOCK.
+  #
+  # Every request has carried a correlation id since Phase 1 -- it goes into the
+  # MDC, into the error body, and back to the caller in a header. It has never
+  # appeared in a LOG LINE, because Boot's default pattern does not include MDC
+  # values and nothing here overrode it. So the id a user quoted from an error
+  # response found nothing when grepped, which is the one job it had.
+  #
+  # `-` when absent, rather than blank, so a line from background work is
+  # visibly un-correlated instead of looking like a formatting slip.
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p [%X{correlationId:--}] %-40.40logger{39} : %m%n%wEx"
+
+# STRUCTURED (JSON) LOGGING is deliberately not configured here, and is one env
+# var away: LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs turns every line into JSON
+# with the MDC as fields, using Boot's own support and no extra dependency.
+#
+# Left off by default because the pattern above is what a person reads while
+# developing, and on by choice in production where something is parsing them.
+# Setting it also makes the pattern above irrelevant -- the MDC arrives as
+# structured fields instead, which is strictly better for querying.
