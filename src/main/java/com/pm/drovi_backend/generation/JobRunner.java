@@ -18,6 +18,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Claims one generation job at a time and runs it.
@@ -65,6 +66,16 @@ public class JobRunner {
      * a value that is meaningless after a restart anyway.
      */
     private volatile Instant pausedUntil = Instant.EPOCH;
+
+    /**
+     * The job this process is working on, or null.
+     *
+     * <p>Exists for the stuck-job sweeper, which reclaims work from runners that are <em>gone</em>.
+     * A slow step is not a stuck one, and without this a long-running job gets requeued underneath
+     * its own runner — which then finishes and marks the same row SUCCEEDED, leaving a duplicate
+     * queued job that generates over the top of a project that was just built.
+     */
+    private volatile UUID currentJobId;
 
     public JobRunner(JobStore jobs, AppConfigService config, ObjectMapper mapper,
                      JobChain chain, List<JobHandler> handlers) {
@@ -130,8 +141,20 @@ public class JobRunner {
         if (claimed.isEmpty()) {
             return false;
         }
-        run(claimed.get());
+        currentJobId = claimed.get().id();
+        try {
+            run(claimed.get());
+        } finally {
+            // Cleared in a finally, or a runner that throws its way out leaves the sweeper
+            // permanently unable to reclaim the one job it most needs to.
+            currentJobId = null;
+        }
         return true;
+    }
+
+    /** What this process is working on, for the sweeper. Null when idle. */
+    public UUID currentJobId() {
+        return currentJobId;
     }
 
     private void run(GenerationJob job) {
